@@ -1,13 +1,13 @@
 module github.com/gameap/minecraft-runner
 
-go 1.22
+go 1.25
 
 require (
-	github.com/fatih/color v1.16.0
-	github.com/goccy/go-yaml v1.11.3
-	github.com/hashicorp/go-retryablehttp v0.7.5
-	github.com/schollz/progressbar/v3 v3.14.2
-	github.com/spf13/cobra v1.8.0
+	github.com/fatih/color v1.18.0
+	github.com/goccy/go-yaml v1.18.0
+	github.com/hashicorp/go-retryablehttp v0.7.8
+	github.com/schollz/progressbar/v3 v3.18.0
+	github.com/spf13/cobra v1.10.1
 )
 
 require (
@@ -17,8 +17,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	github.com/spf13/pflag v1.0.5 // indirect
-	golang.org/x/sys v0.17.0 // indirect
-	golang.org/x/term v0.17.0 // indirect
-	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
+	github.com/spf13/pflag v1.0.9 // indirect
+	golang.org/x/sys v0.29.0 // indirect
+	golang.org/x/term v0.28.0 // indirect
 )
