@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  releases-matrix:
+    name: Release Go Binary
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: ["linux", "windows", "darwin"]
+        goarch: ["amd64", "386", "arm64"]
+        exclude:
+          - goarch: "386"
+            goos: darwin
+          - goarch: "arm64"
+            goos: windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set APP_VERSION env
+        run: echo APP_VERSION=$(echo ${GITHUB_REF} | rev | cut -d'/' -f 1 | rev ) >> ${GITHUB_ENV}
+      - name: Set BUILD_TIME env
+        run: echo BUILD_TIME=$(date --iso-8601=seconds) >> ${GITHUB_ENV}
+      - name: Set GIT_COMMIT env
+        run: echo GIT_COMMIT=$(git rev-parse --short HEAD) >> ${GITHUB_ENV}
+
+      - uses: wangyoucao577/go-release-action@v1.53
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          goos: ${{ matrix.goos }}
+          goarch: ${{ matrix.goarch }}
+          goversion: "1.22"
+          md5sum: false
+          overwrite: true
+          ldflags: -X "github.com/gameap/minecraft-runner/cmd/mcrun.Version=${{ env.APP_VERSION }}" -X "github.com/gameap/minecraft-runner/cmd/mcrun.BuildTime=${{ env.BUILD_TIME }}" -X "github.com/gameap/minecraft-runner/cmd/mcrun.GitCommit=${{ env.GIT_COMMIT }}"
+          binary_name: "mcrun"
