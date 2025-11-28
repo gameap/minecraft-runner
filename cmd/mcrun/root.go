@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	"github.com/gameap/minecraft-runner/internal/config"
@@ -77,7 +76,7 @@ Supported server types: vanilla, paper, forge, fabric, spigot, craftbukkit, caul
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		color.Red("Error: %v", err)
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }

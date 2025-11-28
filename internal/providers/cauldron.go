@@ -3,8 +3,6 @@ package providers
 import (
 	"context"
 	"fmt"
-
-	"github.com/fatih/color"
 )
 
 // CauldronProvider handles legacy Cauldron servers
@@ -21,12 +19,12 @@ func (p *CauldronProvider) Name() string {
 }
 
 func (p *CauldronProvider) printDeprecationWarning() {
-	color.Yellow("\n⚠ WARNING: Cauldron is a legacy project (last version: MC 1.7.10)")
-	color.Yellow("  It is no longer maintained and may have security vulnerabilities.")
-	color.Cyan("\n  Modern alternatives:")
-	color.Cyan("  - Mohist (Forge + Bukkit for modern MC versions)")
-	color.Cyan("  - SpongeForge (Forge + Sponge API)")
-	color.Cyan("  - Magma (Forge + Bukkit/Spigot)")
+	fmt.Println("\n[WARNING] Cauldron is a legacy project (last version: MC 1.7.10)")
+	fmt.Println("  It is no longer maintained and may have security vulnerabilities.")
+	fmt.Println("\n  Modern alternatives:")
+	fmt.Println("  - Mohist (Forge + Bukkit for modern MC versions)")
+	fmt.Println("  - SpongeForge (Forge + Sponge API)")
+	fmt.Println("  - Magma (Forge + Bukkit/Spigot)")
 	fmt.Println()
 }
 

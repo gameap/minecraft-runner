@@ -3,8 +3,6 @@ package providers
 import (
 	"context"
 	"fmt"
-
-	"github.com/fatih/color"
 )
 
 // SpigotProvider suggests Paper as a replacement for Spigot
@@ -25,10 +23,10 @@ func (p *SpigotProvider) Name() string {
 }
 
 func (p *SpigotProvider) printPaperSuggestion() {
-	color.Yellow("\n⚠ Spigot requires BuildTools compilation which is slow and complex.")
-	color.Cyan("  Suggestion: Use Paper instead - it's a drop-in replacement for Spigot")
-	color.Cyan("  that's directly downloadable and offers better performance.")
-	color.Cyan("  Run: mcrun run --mod=paper --version=<version>\n")
+	fmt.Println("\n[WARNING] Spigot requires BuildTools compilation which is slow and complex.")
+	fmt.Println("  Suggestion: Use Paper instead - it's a drop-in replacement for Spigot")
+	fmt.Println("  that's directly downloadable and offers better performance.")
+	fmt.Println("  Run: mcrun run --mod=paper --version=<version>\n")
 }
 
 // ListVersions returns available Minecraft versions

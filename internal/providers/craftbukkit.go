@@ -3,8 +3,6 @@ package providers
 import (
 	"context"
 	"fmt"
-
-	"github.com/fatih/color"
 )
 
 // CraftBukkitProvider suggests Paper as a replacement for CraftBukkit
@@ -25,10 +23,10 @@ func (p *CraftBukkitProvider) Name() string {
 }
 
 func (p *CraftBukkitProvider) printPaperSuggestion() {
-	color.Yellow("\n⚠ CraftBukkit requires BuildTools compilation which is slow and complex.")
-	color.Cyan("  Suggestion: Use Paper instead - it's a modern fork of CraftBukkit/Spigot")
-	color.Cyan("  that's directly downloadable and offers better performance.")
-	color.Cyan("  Run: mcrun run --mod=paper --version=<version>\n")
+	fmt.Println("\n[WARNING] CraftBukkit requires BuildTools compilation which is slow and complex.")
+	fmt.Println("  Suggestion: Use Paper instead - it's a modern fork of CraftBukkit/Spigot")
+	fmt.Println("  that's directly downloadable and offers better performance.")
+	fmt.Println("  Run: mcrun run --mod=paper --version=<version>\n")
 }
 
 // ListVersions returns available Minecraft versions

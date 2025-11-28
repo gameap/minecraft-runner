@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	"github.com/gameap/minecraft-runner/internal/server"
@@ -40,7 +39,7 @@ Examples:
 			return err
 		}
 
-		color.Green("\n✓ Download complete!")
+		fmt.Println("\n[OK] Download complete!")
 		fmt.Printf("  Server: %s\n", mod)
 		fmt.Printf("  Version: %s\n", jar.Version)
 		if jar.ModVersion != "" {
@@ -49,7 +48,7 @@ Examples:
 		fmt.Printf("  File: %s\n", jar.Filename)
 
 		if jar.RequiresInstall {
-			color.Yellow("\n⚠ This server requires installation.")
+			fmt.Println("\n[WARNING] This server requires installation.")
 			fmt.Println("  The installer will run automatically when you use 'mcrun run'")
 		}
 

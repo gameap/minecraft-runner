@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	"github.com/gameap/minecraft-runner/internal/java"
@@ -69,7 +68,7 @@ Examples:
 			return fmt.Errorf("failed to install Java: %w", err)
 		}
 
-		color.Green("\n✓ Java %d installed successfully!", version)
+		fmt.Printf("\n[OK] Java %d installed successfully!\n", version)
 		fmt.Printf("  Path: %s\n", inst.Path)
 		fmt.Printf("  Version: %s\n", inst.FullVersion)
 		fmt.Printf("  Vendor: %s\n", inst.Vendor)
@@ -91,13 +90,13 @@ func listInstalledJava(manager *java.Manager) error {
 	}
 
 	if len(installations) == 0 {
-		color.Yellow("No Java installations found.")
+		fmt.Println("[WARNING] No Java installations found.")
 		fmt.Println("\nInstall Java with:")
 		fmt.Println("  mcrun install java --version=21")
 		return nil
 	}
 
-	color.Cyan("\nInstalled Java versions:\n")
+	fmt.Println("\nInstalled Java versions:")
 	fmt.Println("--------------------------------------------------")
 	fmt.Println("Version | Full Version     | Vendor           | Path")
 	fmt.Println("--------------------------------------------------")

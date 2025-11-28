@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
 
@@ -39,13 +38,13 @@ Examples:
 				return nil
 			}
 
-			color.Cyan("\n%s versions for Minecraft %s:\n", mod, mcVersion)
+			fmt.Printf("\n%s versions for Minecraft %s:\n", mod, mcVersion)
 			fmt.Println("------------------------------------------")
 
 			for _, v := range versions {
 				status := ""
 				if v.IsStable {
-					status = color.GreenString(" (stable)")
+					status = " (stable)"
 				}
 				fmt.Printf("  %s%s\n", v.ModVersion, status)
 			}
@@ -59,7 +58,7 @@ Examples:
 			return fmt.Errorf("failed to list versions: %w", err)
 		}
 
-		color.Cyan("\nAvailable %s versions:\n", mod)
+		fmt.Printf("\nAvailable %s versions:\n", mod)
 		fmt.Println("------------------------------------------")
 		fmt.Println("Version          | Type      | Status")
 		fmt.Println("------------------------------------------")
@@ -84,9 +83,9 @@ Examples:
 
 			status := ""
 			if v.IsStable {
-				status = color.GreenString("stable")
+				status = "stable"
 			} else if vType == "snapshot" {
-				status = color.YellowString("snapshot")
+				status = "snapshot"
 			}
 
 			modVer := ""
