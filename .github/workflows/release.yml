@@ -41,7 +41,7 @@ jobs:
 
       - name: Compress binary
         run: |
-          tar -czvf mcrun-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz mcrun-${{ matrix.goos }}-${{ matrix.goarch }}
+          tar -czvf mcrun-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz mcrun
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
