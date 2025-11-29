@@ -5,13 +5,16 @@ on:
     types: [created]
 
 jobs:
-  releases-tinygo:
-    name: Release TinyGo Binary
+  releases-matrix:
+    name: Release Go Binary
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        goos: ["linux", "darwin"]
-        goarch: ["amd64", "arm64"]
+        goos: ["linux", "windows", "darwin"]
+        goarch: ["amd64", "386", "arm64"]
+        exclude:
+          - goarch: "386"
+            goos: darwin
     steps:
       - uses: actions/checkout@v4
 
@@ -22,69 +25,13 @@ jobs:
       - name: Set GIT_COMMIT env
         run: echo GIT_COMMIT=$(git rev-parse --short HEAD) >> ${GITHUB_ENV}
 
-      - name: Setup TinyGo
-        uses: acifani/setup-tinygo@v2
+      - uses: wangyoucao577/go-release-action@v1.53
         with:
-          tinygo-version: '0.39.0'
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.23'
-
-      - name: Build
-        run: |
-          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} tinygo build \
-            -ldflags="-X 'github.com/gameap/minecraft-runner/cmd/mcrun.Version=${{ env.APP_VERSION }}' -X 'github.com/gameap/minecraft-runner/cmd/mcrun.BuildTime=${{ env.BUILD_TIME }}' -X 'github.com/gameap/minecraft-runner/cmd/mcrun.GitCommit=${{ env.GIT_COMMIT }}'" \
-            -o mcrun \
-            .
-
-      - name: Compress binary
-        run: |
-          tar -czvf mcrun-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz mcrun
-
-      - name: Upload Release Asset
-        uses: softprops/action-gh-release@v2
-        with:
-          files: mcrun-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  releases-windows:
-    name: Release Windows Binary
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        goarch: ["amd64", "arm64"]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set APP_VERSION env
-        run: echo APP_VERSION=$(echo ${GITHUB_REF} | rev | cut -d'/' -f 1 | rev ) >> ${GITHUB_ENV}
-      - name: Set BUILD_TIME env
-        run: echo BUILD_TIME=$(date --iso-8601=seconds) >> ${GITHUB_ENV}
-      - name: Set GIT_COMMIT env
-        run: echo GIT_COMMIT=$(git rev-parse --short HEAD) >> ${GITHUB_ENV}
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.25'
-
-      - name: Build
-        run: |
-          CGO_ENABLED=0 GOOS=windows GOARCH=${{ matrix.goarch }} go build \
-            -ldflags="-s -w -X 'github.com/gameap/minecraft-runner/cmd/mcrun.Version=${{ env.APP_VERSION }}' -X 'github.com/gameap/minecraft-runner/cmd/mcrun.BuildTime=${{ env.BUILD_TIME }}' -X 'github.com/gameap/minecraft-runner/cmd/mcrun.GitCommit=${{ env.GIT_COMMIT }}'" \
-            -o mcrun.exe \
-            .
-
-      - name: Compress binary
-        run: |
-          zip mcrun-windows-${{ matrix.goarch }}.zip mcrun.exe
-
-      - name: Upload Release Asset
-        uses: softprops/action-gh-release@v2
-        with:
-          files: mcrun-windows-${{ matrix.goarch }}.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          goos: ${{ matrix.goos }}
+          goarch: ${{ matrix.goarch }}
+          goversion: "1.25"
+          md5sum: false
+          overwrite: true
+          ldflags: -X "github.com/gameap/minecraft-runner/cmd/mcrun.Version=${{ env.APP_VERSION }}" -X "github.com/gameap/minecraft-runner/cmd/mcrun.BuildTime=${{ env.BUILD_TIME }}" -X "github.com/gameap/minecraft-runner/cmd/mcrun.GitCommit=${{ env.GIT_COMMIT }}"
+          binary_name: "mcrun"
