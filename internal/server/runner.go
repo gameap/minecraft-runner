@@ -153,7 +153,7 @@ func (r *Runner) buildJVMArgs(opts RunOptions, jarPath string) []string {
 		memory = r.config.Defaults.Memory
 	}
 	if memory == "" {
-		memory = "2G"
+		memory = "1G"
 	}
 
 	minMemory := opts.MinMemory
