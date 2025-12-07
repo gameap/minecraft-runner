@@ -104,6 +104,9 @@ func createRegistry() *providers.Registry {
 	registry.Register(providers.NewSpigotProvider())
 	registry.Register(providers.NewCraftBukkitProvider())
 	registry.Register(providers.NewCauldronProvider())
+	registry.Register(providers.NewWaterfallProvider())
+	registry.Register(providers.NewVelocityProvider())
+	registry.Register(providers.NewBungeecordProvider())
 
 	return registry
 }

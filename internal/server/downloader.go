@@ -144,6 +144,21 @@ func FindServerJar(directory string, mod string, version string) (string, error)
 		patterns = append([]string{fmt.Sprintf("fabric-server-mc.%s-*.jar", version)}, patterns...)
 	case "vanilla":
 		patterns = append([]string{fmt.Sprintf("minecraft_server.%s.jar", version)}, patterns...)
+	case "waterfall":
+		patterns = append([]string{
+			fmt.Sprintf("waterfall-%s-*.jar", version),
+			"waterfall-*.jar",
+		}, patterns...)
+	case "velocity":
+		patterns = append([]string{
+			fmt.Sprintf("velocity-%s-*.jar", version),
+			"velocity-*.jar",
+		}, patterns...)
+	case "bungeecord":
+		patterns = append([]string{
+			"BungeeCord-*.jar",
+			"BungeeCord.jar",
+		}, patterns...)
 	}
 
 	// Search for JAR files

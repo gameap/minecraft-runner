@@ -88,21 +88,26 @@ func (r *Runner) Run(ctx context.Context, opts RunOptions) error {
 		}
 	}
 
-	// Create EULA if requested
-	if opts.AcceptEULA || (r.config != nil && r.config.Defaults.AcceptEULA) {
-		if err := config.CreateEULA(opts.Directory); err != nil {
-			return fmt.Errorf("failed to create EULA: %w", err)
+	// Check if this is a proxy server (proxies don't use EULA or server.properties)
+	isProxy := opts.Mod == "waterfall" || opts.Mod == "velocity" || opts.Mod == "bungeecord"
+
+	if !isProxy {
+		// Create EULA if requested
+		if opts.AcceptEULA || (r.config != nil && r.config.Defaults.AcceptEULA) {
+			if err := config.CreateEULA(opts.Directory); err != nil {
+				return fmt.Errorf("failed to create EULA: %w", err)
+			}
 		}
-	}
 
-	// Create default server.properties if it doesn't exist
-	if err := config.CreateDefaultServerProperties(opts.Directory); err != nil {
-		return fmt.Errorf("failed to create server.properties: %w", err)
-	}
+		// Create default server.properties if it doesn't exist
+		if err := config.CreateDefaultServerProperties(opts.Directory); err != nil {
+			return fmt.Errorf("failed to create server.properties: %w", err)
+		}
 
-	// Update server.properties
-	if err := r.updateServerProperties(opts); err != nil {
-		return fmt.Errorf("failed to update server.properties: %w", err)
+		// Update server.properties
+		if err := r.updateServerProperties(opts); err != nil {
+			return fmt.Errorf("failed to update server.properties: %w", err)
+		}
 	}
 
 	// Find the server JAR to run
@@ -139,8 +144,9 @@ func (r *Runner) findJava(ctx context.Context, opts RunOptions, provider provide
 		return r.javaManager.GetByVersion(ctx, opts.JavaVersion, true)
 	}
 
-	// Get recommended version for this Minecraft version
-	return r.javaManager.GetForMinecraftVersion(ctx, opts.Version, true)
+	// Use provider's recommended version (handles both MC servers and proxies)
+	recommended := provider.GetRecommendedJavaVersion(opts.Version)
+	return r.javaManager.GetByVersion(ctx, recommended, true)
 }
 
 // buildJVMArgs constructs JVM arguments for running the server

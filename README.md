@@ -5,7 +5,7 @@ A cross-platform CLI tool to download and run Minecraft servers with integrated 
 ## Features
 
 - **Cross-platform**: Works on Linux, Windows, and macOS
-- **Multiple server types**: Vanilla, Paper, Fabric, Forge, and more
+- **Multiple server types**: Vanilla, Paper, Fabric, Forge, proxy servers (Waterfall, Velocity, Bungeecord), and more
 - **Automatic Java management**: Detects, installs, and manages Java versions
 - **Official API integration**: Downloads from official sources (Mojang, PaperMC, Fabric, Forge)
 - **Smart version mapping**: Automatically selects correct Java version for each Minecraft version
@@ -71,6 +71,15 @@ mcrun run --mod=paper --version=1.20.4 --rcon-port=25575 --rcon-password=secret 
 
 # Run Forge with custom memory
 mcrun run --mod=forge --version=1.20.4 --memory=8G --min-memory=4G --accept-eula
+
+# Run Waterfall proxy
+mcrun run --mod=waterfall --version=1.21
+
+# Run Velocity proxy
+mcrun run --mod=velocity
+
+# Run Bungeecord proxy
+mcrun run --mod=bungeecord
 ```
 
 ### list
@@ -94,6 +103,12 @@ mcrun list --mod=forge
 
 # List Paper builds for specific MC version
 mcrun list --mod=paper --version=1.20.4
+
+# List Waterfall proxy versions
+mcrun list --mod=waterfall
+
+# List Velocity proxy versions
+mcrun list --mod=velocity
 ```
 
 ### download
@@ -117,6 +132,15 @@ mcrun download --mod=paper --version=1.20.4
 
 # Force re-download
 mcrun download --mod=fabric --version=1.20.4 --force
+
+# Download Waterfall proxy
+mcrun download --mod=waterfall --version=1.21
+
+# Download Velocity proxy
+mcrun download --mod=velocity
+
+# Download Bungeecord proxy
+mcrun download --mod=bungeecord
 ```
 
 ### install java
@@ -153,7 +177,7 @@ mcrun install java --version=21 --set-default
 ```
 -c, --config string        Config file path (default: ~/.mcrun/config.yaml)
 -d, --dir string           Server working directory (default: current directory)
--m, --mod string           Server type: vanilla, paper, forge, fabric, spigot, craftbukkit, cauldron
+-m, --mod string           Server type: vanilla, paper, forge, fabric, waterfall, velocity, bungeecord, spigot, craftbukkit, cauldron
     --mod-version string   Mod-specific version (e.g., Paper build number)
     --version string       Minecraft version (e.g., 1.20.4)
     --java int             Java version override (8, 11, 17, 21)
@@ -162,6 +186,8 @@ mcrun install java --version=21 --set-default
 ```
 
 ## Supported Server Types
+
+### Game Servers
 
 | Type | Description | Download Source |
 |------|-------------|-----------------|
@@ -172,6 +198,16 @@ mcrun install java --version=21 --set-default
 | `spigot` | Spigot (suggests Paper) | - |
 | `craftbukkit` | CraftBukkit (suggests Paper) | - |
 | `cauldron` | Cauldron (legacy, MC 1.7.10 max) | Archived |
+
+### Proxy Servers
+
+| Type | Description | Download Source |
+|------|-------------|-----------------|
+| `waterfall` | Waterfall proxy (BungeeCord fork by PaperMC) | PaperMC API |
+| `velocity` | Velocity proxy (modern, high-performance) | PaperMC API |
+| `bungeecord` | BungeeCord proxy (original) | Jenkins CI |
+
+**Note:** Proxy servers don't require EULA acceptance or server.properties - they use their own `config.yml` configuration.
 
 ## Java Version Requirements
 
@@ -184,6 +220,8 @@ mcrun automatically selects the correct Java version based on Minecraft version:
 | 1.18 - 1.20.4 | Java 17 |
 | 1.17 - 1.17.1 | Java 16+ |
 | 1.16.5 and older | Java 8 |
+
+**Proxy servers** (Waterfall, Velocity, Bungeecord) require **Java 17**.
 
 ## Configuration
 
