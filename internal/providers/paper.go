@@ -124,6 +124,6 @@ func (p *PaperProvider) PostDownload(ctx context.Context, jarPath string, javaPa
 }
 
 // GetRecommendedJavaVersion returns the recommended Java version
-func (p *PaperProvider) GetRecommendedJavaVersion(mcVersion string) int {
-	return GetRecommendedJavaVersion(mcVersion)
+func (p *PaperProvider) GetRecommendedJavaVersion(ctx context.Context, mcVersion string) int {
+	return GetRecommendedJavaVersion(ctx, mcVersion)
 }

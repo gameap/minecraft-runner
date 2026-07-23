@@ -145,7 +145,7 @@ func (r *Runner) findJava(ctx context.Context, opts RunOptions, provider provide
 	}
 
 	// Use provider's recommended version (handles both MC servers and proxies)
-	recommended := provider.GetRecommendedJavaVersion(opts.Version)
+	recommended := provider.GetRecommendedJavaVersion(ctx, opts.Version)
 	return r.javaManager.GetByVersion(ctx, recommended, true)
 }
 

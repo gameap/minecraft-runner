@@ -54,7 +54,8 @@ var rootCmd = &cobra.Command{
 Cross-platform CLI tool to download and run Minecraft servers
 with integrated Java management.
 
-Supported server types: vanilla, paper, forge, fabric, spigot, craftbukkit, cauldron`,
+Supported server types: vanilla, paper, forge, fabric, spigot, craftbukkit, cauldron,
+waterfall, velocity, bungeecord`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		var err error
 		cfg, err = config.Load(cfgFile, serverDir)
@@ -85,9 +86,9 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file (default: ~/.mcrun/config.yaml)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "V", false, "enable verbose output")
 	rootCmd.PersistentFlags().StringVar(&mcVersion, "version", "", "Minecraft version (e.g., 1.20.4)")
-	rootCmd.PersistentFlags().StringVarP(&mod, "mod", "m", "vanilla", "server mod type (vanilla, paper, forge, fabric, spigot, craftbukkit, cauldron)")
+	rootCmd.PersistentFlags().StringVarP(&mod, "mod", "m", "vanilla", "server mod type (vanilla, paper, forge, fabric, spigot, craftbukkit, cauldron, waterfall, velocity, bungeecord)")
 	rootCmd.PersistentFlags().StringVar(&modVersion, "mod-version", "", "mod-specific version")
-	rootCmd.PersistentFlags().IntVar(&javaVersion, "java", 0, "Java version override (8, 11, 17, 21)")
+	rootCmd.PersistentFlags().IntVar(&javaVersion, "java", 0, "Java version override (8, 11, 17, 21, 25)")
 	rootCmd.PersistentFlags().StringVar(&javaPath, "java-path", "", "custom Java binary path")
 	rootCmd.PersistentFlags().StringVarP(&serverDir, "dir", "d", ".", "server working directory")
 }

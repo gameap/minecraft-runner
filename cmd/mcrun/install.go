@@ -35,7 +35,7 @@ var installJavaCmd = &cobra.Command{
 	Short: "Install or manage Java",
 	Long: `Install Java from Eclipse Adoptium or list installed Java versions.
 
-Available LTS versions: 8, 11, 17, 21
+Available LTS versions: 8, 11, 17, 21, 25
 
 Examples:
   mcrun install java                    # Install latest LTS Java
@@ -55,7 +55,7 @@ Examples:
 		// Install mode
 		version := installJavaVersion
 		if version == 0 {
-			version = 21 // Default to latest LTS
+			version = 25 // Default to latest LTS
 		}
 
 		fmt.Printf("Installing Java %d...\n", version)
@@ -92,7 +92,7 @@ func listInstalledJava(manager *java.Manager) error {
 	if len(installations) == 0 {
 		fmt.Println("[WARNING] No Java installations found.")
 		fmt.Println("\nInstall Java with:")
-		fmt.Println("  mcrun install java --version=21")
+		fmt.Println("  mcrun install java --version=25")
 		return nil
 	}
 
@@ -136,7 +136,7 @@ func init() {
 	rootCmd.AddCommand(installCmd)
 	installCmd.AddCommand(installJavaCmd)
 
-	installJavaCmd.Flags().IntVar(&installJavaVersion, "version", 0, "Java version to install (8, 11, 17, 21)")
+	installJavaCmd.Flags().IntVar(&installJavaVersion, "version", 0, "Java version to install (8, 11, 17, 21, 25)")
 	installJavaCmd.Flags().BoolVar(&installSystemWide, "system", false, "install system-wide (requires root/admin)")
 	installJavaCmd.Flags().BoolVar(&installListJava, "list", false, "list installed Java versions")
 	installJavaCmd.Flags().BoolVar(&installSetDefault, "set-default", false, "set as system default after install")

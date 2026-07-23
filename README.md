@@ -151,7 +151,7 @@ Install or manage Java versions.
 mcrun install java [flags]
 
 Flags:
-      --version int      Java version to install (8, 11, 17, 21)
+      --version int      Java version to install (8, 11, 17, 21, 25)
       --system           Install system-wide (requires root/admin)
       --list             List installed Java versions
       --set-default      Set as system default after install
@@ -180,7 +180,7 @@ mcrun install java --version=21 --set-default
 -m, --mod string           Server type: vanilla, paper, forge, fabric, waterfall, velocity, bungeecord, spigot, craftbukkit, cauldron
     --mod-version string   Mod-specific version (e.g., Paper build number)
     --version string       Minecraft version (e.g., 1.20.4)
-    --java int             Java version override (8, 11, 17, 21)
+    --java int             Java version override (8, 11, 17, 21, 25)
     --java-path string     Custom Java binary path
 -V, --verbose              Enable verbose output
 ```
@@ -211,14 +211,16 @@ mcrun install java --version=21 --set-default
 
 ## Java Version Requirements
 
-mcrun automatically selects the correct Java version based on Minecraft version:
+mcrun automatically selects the correct Java version: the requirement is taken from
+Mojang's version metadata when available, with this table as an offline fallback:
 
 | Minecraft Version | Required Java |
 |-------------------|---------------|
+| 26.2+ (year-based versions) | Java 25 |
 | 1.21+ | Java 21 |
 | 1.20.5 - 1.20.6 | Java 21 |
 | 1.18 - 1.20.4 | Java 17 |
-| 1.17 - 1.17.1 | Java 16+ |
+| 1.17 - 1.17.1 | Java 17 |
 | 1.16.5 and older | Java 8 |
 
 **Proxy servers** (Waterfall, Velocity, Bungeecord) require **Java 17**.

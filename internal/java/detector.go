@@ -14,7 +14,7 @@ import (
 // Installation represents a detected Java installation
 type Installation struct {
 	Path        string // Full path to java binary
-	Version     int    // Major version (8, 11, 17, 21)
+	Version     int    // Major version (8, 11, 17, 21, 25)
 	FullVersion string // e.g., "21.0.9+10-LTS"
 	Vendor      string // e.g., "Eclipse Adoptium"
 	IsSystem    bool   // System-wide vs user/bundled
@@ -69,39 +69,6 @@ func (d *Detector) DetectAll() ([]Installation, error) {
 	}
 
 	return installations, nil
-}
-
-// FindForVersion finds a Java installation suitable for a Minecraft version
-func (d *Detector) FindForVersion(mcVersion string) (*Installation, error) {
-	required := GetRequiredJavaVersion(mcVersion)
-	installations, err := d.DetectAll()
-	if err != nil {
-		return nil, err
-	}
-
-	// First try to find exact match
-	for _, inst := range installations {
-		if inst.Version == required {
-			return &inst, nil
-		}
-	}
-
-	// Then find any compatible version (higher is ok)
-	var best *Installation
-	for i := range installations {
-		inst := &installations[i]
-		if inst.Version >= required {
-			if best == nil || inst.Version < best.Version {
-				best = inst
-			}
-		}
-	}
-
-	if best != nil {
-		return best, nil
-	}
-
-	return nil, fmt.Errorf("no compatible Java found (need Java %d or higher)", required)
 }
 
 // getSearchPaths returns paths to search for Java installations
