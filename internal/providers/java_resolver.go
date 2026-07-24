@@ -90,10 +90,24 @@ func roundUpToLTS(version int) int {
 // fallbackJavaVersion guesses the Java version from the Minecraft version
 // string when Mojang metadata is unavailable
 func fallbackJavaVersion(mcVersion string) int {
+	if year, ok := parseSnapshotYear(mcVersion); ok {
+		// Weekly snapshots map by year: 24w+ is the 1.20.5-1.21.x era (Java 21),
+		// 21w-23w is the 1.17-1.20.4 era (Java 17), older snapshots run on Java 8
+		switch {
+		case year >= 26:
+			return 25
+		case year >= 24:
+			return 21
+		case year >= 21:
+			return 17
+		}
+		return 8
+	}
+
 	major, minor, patch := parseMinecraftVersion(mcVersion)
 
-	// Year-based versions (26.2 and later) require Java 25
-	if major >= 22 {
+	// Year-based versions (26.x and later) require Java 25
+	if major >= 26 {
 		return 25
 	}
 
@@ -109,6 +123,15 @@ func fallbackJavaVersion(mcVersion string) int {
 	}
 
 	return 8
+}
+
+// parseSnapshotYear extracts the year from weekly snapshot IDs like "24w14a"
+func parseSnapshotYear(version string) (int, bool) {
+	var year, week int
+	if n, _ := fmt.Sscanf(version, "%dw%d", &year, &week); n == 2 {
+		return year, true
+	}
+	return 0, false
 }
 
 // parseMinecraftVersion parses a Minecraft version string into components

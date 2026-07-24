@@ -211,11 +211,13 @@ mcrun install java --version=21 --set-default
 
 ## Java Version Requirements
 
-mcrun automatically selects the correct Java version: the requirement is taken from
-Mojang's version metadata when available, with this table as an offline fallback:
+mcrun automatically selects a recommended Java version: it starts from the requirement
+in Mojang's version metadata when available and rounds it up to the nearest available
+LTS release (e.g. Minecraft 1.17 reports Java 16, mcrun uses Java 17). When Mojang
+metadata is unavailable, this fallback table is used:
 
-| Minecraft Version | Required Java |
-|-------------------|---------------|
+| Minecraft Version | Recommended Java |
+|-------------------|------------------|
 | 26.2+ (year-based versions) | Java 25 |
 | 1.21+ | Java 21 |
 | 1.20.5 - 1.20.6 | Java 21 |

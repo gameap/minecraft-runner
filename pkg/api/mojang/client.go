@@ -24,8 +24,12 @@ func NewClient() *Client {
 	return NewClientWithManifestURL(versionManifestURL)
 }
 
-// NewClientWithManifestURL creates a Mojang API client with a custom version manifest URL
+// NewClientWithManifestURL creates a Mojang API client with a custom version
+// manifest URL; an empty URL falls back to the official Mojang manifest
 func NewClientWithManifestURL(manifestURL string) *Client {
+	if manifestURL == "" {
+		manifestURL = versionManifestURL
+	}
 	return &Client{
 		http:        utils.NewHTTPClient(false),
 		manifestURL: manifestURL,
