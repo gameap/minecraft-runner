@@ -85,7 +85,7 @@ func (p *CauldronProvider) PostDownload(ctx context.Context, jarPath string, jav
 }
 
 // GetRecommendedJavaVersion returns the recommended Java version
-func (p *CauldronProvider) GetRecommendedJavaVersion(mcVersion string) int {
+func (p *CauldronProvider) GetRecommendedJavaVersion(_ context.Context, _ string) int {
 	// Cauldron is old and requires Java 8
 	return 8
 }

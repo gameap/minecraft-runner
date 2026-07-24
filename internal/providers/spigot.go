@@ -26,7 +26,8 @@ func (p *SpigotProvider) printPaperSuggestion() {
 	fmt.Println("\n[WARNING] Spigot requires BuildTools compilation which is slow and complex.")
 	fmt.Println("  Suggestion: Use Paper instead - it's a drop-in replacement for Spigot")
 	fmt.Println("  that's directly downloadable and offers better performance.")
-	fmt.Println("  Run: mcrun run --mod=paper --version=<version>\n")
+	fmt.Println("  Run: mcrun run --mod=paper --version=<version>")
+	fmt.Println()
 }
 
 // ListVersions returns available Minecraft versions
@@ -60,6 +61,6 @@ func (p *SpigotProvider) PostDownload(ctx context.Context, jarPath string, javaP
 }
 
 // GetRecommendedJavaVersion returns the recommended Java version
-func (p *SpigotProvider) GetRecommendedJavaVersion(mcVersion string) int {
-	return GetRecommendedJavaVersion(mcVersion)
+func (p *SpigotProvider) GetRecommendedJavaVersion(ctx context.Context, mcVersion string) int {
+	return GetRecommendedJavaVersion(ctx, mcVersion)
 }

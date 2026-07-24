@@ -107,6 +107,6 @@ func (p *BungeecordProvider) PostDownload(ctx context.Context, jarPath string, j
 }
 
 // GetRecommendedJavaVersion returns Java 17 for modern Bungeecord
-func (p *BungeecordProvider) GetRecommendedJavaVersion(_ string) int {
+func (p *BungeecordProvider) GetRecommendedJavaVersion(_ context.Context, _ string) int {
 	return 17
 }

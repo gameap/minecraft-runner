@@ -121,6 +121,6 @@ func (p *WaterfallProvider) PostDownload(ctx context.Context, jarPath string, ja
 }
 
 // GetRecommendedJavaVersion returns Java 17 for modern Waterfall
-func (p *WaterfallProvider) GetRecommendedJavaVersion(_ string) int {
+func (p *WaterfallProvider) GetRecommendedJavaVersion(_ context.Context, _ string) int {
 	return 17
 }

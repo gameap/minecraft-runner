@@ -23,36 +23,6 @@ func NewManager(cfg *config.Config) *Manager {
 	}
 }
 
-// GetForMinecraftVersion finds or installs Java suitable for a Minecraft version
-func (m *Manager) GetForMinecraftVersion(ctx context.Context, mcVersion string, autoInstall bool) (*Installation, error) {
-	required := GetRequiredJavaVersion(mcVersion)
-
-	// Check config for custom path
-	if m.config != nil && m.config.Java.Paths != nil {
-		if customPath, ok := m.config.Java.Paths[required]; ok && customPath != "" {
-			inst, err := m.detector.getInstallationInfo(customPath)
-			if err == nil && inst.Version >= required {
-				return inst, nil
-			}
-		}
-	}
-
-	// Try to find existing installation
-	inst, err := m.detector.FindForVersion(mcVersion)
-	if err == nil {
-		return inst, nil
-	}
-
-	// Auto-install if enabled
-	if autoInstall || (m.config != nil && m.config.Java.AutoInstall) {
-		fmt.Printf("Java %d not found. Installing...\n", required)
-		return m.installer.Install(ctx, required, InstallOptions{})
-	}
-
-	return nil, fmt.Errorf("Java %d required for Minecraft %s but not found. Run 'mcrun install java --version=%d' to install",
-		required, mcVersion, required)
-}
-
 // GetByVersion finds or installs a specific Java version
 func (m *Manager) GetByVersion(ctx context.Context, version int, autoInstall bool) (*Installation, error) {
 	// Check config for custom path

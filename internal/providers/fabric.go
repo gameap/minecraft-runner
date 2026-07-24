@@ -126,6 +126,6 @@ func (p *FabricProvider) PostDownload(ctx context.Context, jarPath string, javaP
 }
 
 // GetRecommendedJavaVersion returns the recommended Java version
-func (p *FabricProvider) GetRecommendedJavaVersion(mcVersion string) int {
-	return GetRecommendedJavaVersion(mcVersion)
+func (p *FabricProvider) GetRecommendedJavaVersion(ctx context.Context, mcVersion string) int {
+	return GetRecommendedJavaVersion(ctx, mcVersion)
 }

@@ -17,19 +17,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup TinyGo
-        uses: acifani/setup-tinygo@v2
-        with:
-          tinygo-version: '0.39.0'
-
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.25'
-
-      - name: Build with TinyGo
-        run: |
-          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} tinygo build -o mcrun-${{ matrix.goos }}-${{ matrix.goarch }}-tinygo .
 
       - name: Build with Go
         run: |
@@ -54,3 +45,20 @@ jobs:
           $env:CGO_ENABLED="0"
           $env:GOARCH="${{ matrix.goarch }}"
           go build -ldflags="-s -w" -o mcrun-windows-${{ matrix.goarch }}.exe .
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...

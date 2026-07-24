@@ -15,13 +15,24 @@ const (
 
 // Client is the Mojang API client
 type Client struct {
-	http *utils.HTTPClient
+	http        *utils.HTTPClient
+	manifestURL string
 }
 
 // NewClient creates a new Mojang API client
 func NewClient() *Client {
+	return NewClientWithManifestURL(versionManifestURL)
+}
+
+// NewClientWithManifestURL creates a Mojang API client with a custom version
+// manifest URL; an empty URL falls back to the official Mojang manifest
+func NewClientWithManifestURL(manifestURL string) *Client {
+	if manifestURL == "" {
+		manifestURL = versionManifestURL
+	}
 	return &Client{
-		http: utils.NewHTTPClient(false),
+		http:        utils.NewHTTPClient(false),
+		manifestURL: manifestURL,
 	}
 }
 
@@ -69,7 +80,7 @@ type VersionDetail struct {
 
 // GetVersionManifest fetches the version manifest from Mojang
 func (c *Client) GetVersionManifest(ctx context.Context) (*VersionManifest, error) {
-	data, err := c.http.Get(ctx, versionManifestURL)
+	data, err := c.http.Get(ctx, c.manifestURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch version manifest: %w", err)
 	}

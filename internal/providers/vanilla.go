@@ -106,6 +106,6 @@ func (p *VanillaProvider) PostDownload(ctx context.Context, jarPath string, java
 }
 
 // GetRecommendedJavaVersion returns the recommended Java version
-func (p *VanillaProvider) GetRecommendedJavaVersion(mcVersion string) int {
-	return GetRecommendedJavaVersion(mcVersion)
+func (p *VanillaProvider) GetRecommendedJavaVersion(ctx context.Context, mcVersion string) int {
+	return GetRecommendedJavaVersion(ctx, mcVersion)
 }

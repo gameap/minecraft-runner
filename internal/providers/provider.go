@@ -47,7 +47,7 @@ type Provider interface {
 	PostDownload(ctx context.Context, jarPath string, javaPath string) error
 
 	// GetRecommendedJavaVersion returns the recommended Java version for this MC version
-	GetRecommendedJavaVersion(mcVersion string) int
+	GetRecommendedJavaVersion(ctx context.Context, mcVersion string) int
 }
 
 // Registry holds all available providers
@@ -83,44 +83,4 @@ func (r *Registry) List() []string {
 		names = append(names, name)
 	}
 	return names
-}
-
-// GetRecommendedJavaVersion returns the recommended Java version for a Minecraft version
-func GetRecommendedJavaVersion(mcVersion string) int {
-	// Parse version to determine Java requirement
-	// MC 1.21+ requires Java 21
-	// MC 1.20.5+ requires Java 21
-	// MC 1.18 - 1.20.4 requires Java 17
-	// MC 1.17 requires Java 16
-	// Older versions can use Java 8
-
-	major, minor, patch := parseMinecraftVersion(mcVersion)
-
-	if major >= 1 {
-		if minor >= 21 {
-			return 21
-		}
-		if minor == 20 && patch >= 5 {
-			return 21
-		}
-		if minor >= 18 {
-			return 17
-		}
-		if minor >= 17 {
-			return 16
-		}
-	}
-
-	return 8
-}
-
-// parseMinecraftVersion parses a Minecraft version string into components
-func parseMinecraftVersion(version string) (major, minor, patch int) {
-	// Handle formats like "1.20.4", "1.20", "1.20.4-pre1", etc.
-	var m, n, p int
-	fmt.Sscanf(version, "%d.%d.%d", &m, &n, &p)
-	if m == 0 {
-		fmt.Sscanf(version, "%d.%d", &m, &n)
-	}
-	return m, n, p
 }

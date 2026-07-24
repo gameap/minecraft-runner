@@ -121,6 +121,6 @@ func (p *VelocityProvider) PostDownload(ctx context.Context, jarPath string, jav
 }
 
 // GetRecommendedJavaVersion returns Java 17 for modern Velocity
-func (p *VelocityProvider) GetRecommendedJavaVersion(_ string) int {
+func (p *VelocityProvider) GetRecommendedJavaVersion(_ context.Context, _ string) int {
 	return 17
 }

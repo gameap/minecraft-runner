@@ -176,8 +176,8 @@ func (p *ForgeProvider) PostDownload(ctx context.Context, jarPath string, javaPa
 }
 
 // GetRecommendedJavaVersion returns the recommended Java version
-func (p *ForgeProvider) GetRecommendedJavaVersion(mcVersion string) int {
-	return GetRecommendedJavaVersion(mcVersion)
+func (p *ForgeProvider) GetRecommendedJavaVersion(ctx context.Context, mcVersion string) int {
+	return GetRecommendedJavaVersion(ctx, mcVersion)
 }
 
 // compareVersions compares two version strings
