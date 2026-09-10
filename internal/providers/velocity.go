@@ -51,12 +51,12 @@ func (p *VelocityProvider) ListModVersions(ctx context.Context, version string) 
 		return nil, err
 	}
 
-	versions := make([]VersionInfo, 0, len(vb.Builds))
-	for _, build := range vb.Builds {
+	versions := make([]VersionInfo, 0, len(*vb))
+	for _, build := range *vb {
 		versions = append(versions, VersionInfo{
 			MinecraftVersion: version,
-			ModVersion:       strconv.Itoa(build),
-			IsStable:         true,
+			ModVersion:       strconv.Itoa(build.ID),
+			IsStable:         build.Channel == "STABLE",
 			Type:             "build",
 		})
 	}
