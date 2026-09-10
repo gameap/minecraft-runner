@@ -26,6 +26,40 @@ type Project struct {
 	Versions    []string `json:"versions"`
 }
 
+func (p *Project) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		ProjectID   string          `json:"project_id"`
+		ProjectName string          `json:"project_name"`
+		Versions    json.RawMessage `json:"versions"`
+	}
+
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	p.ProjectID = raw.ProjectID
+	p.ProjectName = raw.ProjectName
+
+	// Paper returns versions as a simple array.
+	var versions []string
+	if err := json.Unmarshal(raw.Versions, &versions); err == nil {
+		p.Versions = versions
+		return nil
+	}
+
+	// Velocity returns versions grouped into objects.
+	var groups map[string][]string
+	if err := json.Unmarshal(raw.Versions, &groups); err != nil {
+		return fmt.Errorf("invalid versions format: %w", err)
+	}
+
+	for _, group := range groups {
+		p.Versions = append(p.Versions, group...)
+	}
+
+	return nil
+}
+
 type VersionBuilds []BuildInfo
 
 type BuildInfo struct {

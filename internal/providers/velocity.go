@@ -103,11 +103,16 @@ func (p *VelocityProvider) GetServerJar(ctx context.Context, version, modVersion
 		return nil, err
 	}
 
-	downloadURL := p.client.GetDownloadURL("velocity", version, buildInfo.Build, buildInfo.Downloads.Application.Name)
+	downloadURL := buildInfo.Downloads.Application.URL
+
+	buildNumber := buildInfo.ID
+	if buildNumber == 0 {
+		buildNumber = buildInfo.Build
+	}
 
 	return &ServerJar{
 		Version:         version,
-		ModVersion:      strconv.Itoa(buildInfo.Build),
+		ModVersion:      strconv.Itoa(buildNumber),
 		URL:             downloadURL,
 		SHA256:          buildInfo.Downloads.Application.SHA256,
 		Filename:        buildInfo.Downloads.Application.Name,
@@ -122,5 +127,5 @@ func (p *VelocityProvider) PostDownload(ctx context.Context, jarPath string, jav
 
 // GetRecommendedJavaVersion returns Java 17 for modern Velocity
 func (p *VelocityProvider) GetRecommendedJavaVersion(_ context.Context, _ string) int {
-	return 17
+	return 25
 }

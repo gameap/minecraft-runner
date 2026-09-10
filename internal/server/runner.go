@@ -204,8 +204,12 @@ func (r *Runner) buildJVMArgs(opts RunOptions, jarPath string) []string {
 	// Add custom JVM args
 	args = append(args, opts.JVMArgs...)
 
-	// JAR and nogui
-	args = append(args, "-jar", jarPath, "--nogui")
+	// JAR and server-specific arguments
+	args = append(args, "-jar", jarPath)
+
+	if opts.Mod != "velocity" {
+		args = append(args, "--nogui")
+	}
 
 	return args
 }
