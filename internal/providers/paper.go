@@ -51,12 +51,12 @@ func (p *PaperProvider) ListModVersions(ctx context.Context, mcVersion string) (
 		return nil, err
 	}
 
-	versions := make([]VersionInfo, 0, len(vb.Builds))
-	for _, build := range vb.Builds {
+	versions := make([]VersionInfo, 0, len(*vb))
+	for _, build := range *vb {
 		versions = append(versions, VersionInfo{
 			MinecraftVersion: mcVersion,
-			ModVersion:       strconv.Itoa(build),
-			IsStable:         true,
+			ModVersion:       strconv.Itoa(build.ID),
+			IsStable:         build.Channel == "STABLE",
 			Type:             "build",
 		})
 	}
@@ -106,11 +106,11 @@ func (p *PaperProvider) GetServerJar(ctx context.Context, mcVersion, modVersion 
 		return nil, err
 	}
 
-	downloadURL := p.client.GetDownloadURL("paper", mcVersion, buildInfo.Build, buildInfo.Downloads.Application.Name)
+	downloadURL := buildInfo.Downloads.Application.URL
 
 	return &ServerJar{
 		Version:         mcVersion,
-		ModVersion:      strconv.Itoa(buildInfo.Build),
+		ModVersion:      strconv.Itoa(buildInfo.ID),
 		URL:             downloadURL,
 		SHA256:          buildInfo.Downloads.Application.SHA256,
 		Filename:        buildInfo.Downloads.Application.Name,

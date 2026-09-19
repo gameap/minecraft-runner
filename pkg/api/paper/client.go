@@ -8,54 +8,80 @@ import (
 	"github.com/gameap/minecraft-runner/internal/utils"
 )
 
-const (
-	baseURL = "https://api.papermc.io/v2"
-)
+const baseURL = "https://fill.papermc.io/v3"
 
-// Client is the Paper API client
 type Client struct {
 	http *utils.HTTPClient
 }
 
-// NewClient creates a new Paper API client
 func NewClient() *Client {
 	return &Client{
 		http: utils.NewHTTPClient(false),
 	}
 }
 
-// Project represents a Paper project
 type Project struct {
 	ProjectID   string   `json:"project_id"`
 	ProjectName string   `json:"project_name"`
 	Versions    []string `json:"versions"`
 }
 
-// VersionBuilds contains builds for a specific version
-type VersionBuilds struct {
-	ProjectID string `json:"project_id"`
-	Version   string `json:"version"`
-	Builds    []int  `json:"builds"`
+func (p *Project) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		ProjectID   string          `json:"project_id"`
+		ProjectName string          `json:"project_name"`
+		Versions    json.RawMessage `json:"versions"`
+	}
+
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	p.ProjectID = raw.ProjectID
+	p.ProjectName = raw.ProjectName
+
+	// Paper returns versions as a simple array.
+	var versions []string
+	if err := json.Unmarshal(raw.Versions, &versions); err == nil {
+		p.Versions = versions
+		return nil
+	}
+
+	// Velocity returns versions grouped into objects.
+	var groups map[string][]string
+	if err := json.Unmarshal(raw.Versions, &groups); err != nil {
+		return fmt.Errorf("invalid versions format: %w", err)
+	}
+
+	for _, group := range groups {
+		p.Versions = append(p.Versions, group...)
+	}
+
+	return nil
 }
 
-// BuildInfo contains detailed information about a build
+type VersionBuilds []BuildInfo
+
 type BuildInfo struct {
 	ProjectID string `json:"project_id"`
 	Version   string `json:"version"`
 	Build     int    `json:"build"`
+	ID        int    `json:"id"`
 	Time      string `json:"time"`
 	Channel   string `json:"channel"`
 	Downloads struct {
 		Application struct {
 			Name   string `json:"name"`
 			SHA256 string `json:"sha256"`
-		} `json:"application"`
+			URL    string `json:"url"`
+			Size   int64  `json:"size"`
+		} `json:"server:default"`
 	} `json:"downloads"`
 }
 
-// GetProject fetches project information
 func (c *Client) GetProject(ctx context.Context, project string) (*Project, error) {
 	url := fmt.Sprintf("%s/projects/%s", baseURL, project)
+
 	data, err := c.http.Get(ctx, url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch project: %w", err)
@@ -69,9 +95,9 @@ func (c *Client) GetProject(ctx context.Context, project string) (*Project, erro
 	return &p, nil
 }
 
-// GetVersionBuilds fetches available builds for a version
 func (c *Client) GetVersionBuilds(ctx context.Context, project, version string) (*VersionBuilds, error) {
-	url := fmt.Sprintf("%s/projects/%s/versions/%s", baseURL, project, version)
+	url := fmt.Sprintf("%s/projects/%s/versions/%s/builds", baseURL, project, version)
+
 	data, err := c.http.Get(ctx, url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch version builds: %w", err)
@@ -85,41 +111,42 @@ func (c *Client) GetVersionBuilds(ctx context.Context, project, version string) 
 	return &vb, nil
 }
 
-// GetBuildInfo fetches information about a specific build
 func (c *Client) GetBuildInfo(ctx context.Context, project, version string, build int) (*BuildInfo, error) {
-	url := fmt.Sprintf("%s/projects/%s/versions/%s/builds/%d", baseURL, project, version, build)
-	data, err := c.http.Get(ctx, url)
+	vb, err := c.GetVersionBuilds(ctx, project, version)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch build info: %w", err)
+		return nil, err
 	}
 
-	var bi BuildInfo
-	if err := json.Unmarshal(data, &bi); err != nil {
-		return nil, fmt.Errorf("failed to parse build info: %w", err)
+	for _, b := range *vb {
+		if b.Build == build || b.ID == build {
+			return &b, nil
+		}
 	}
 
-	return &bi, nil
+	return nil, fmt.Errorf("build %d not found for version %s", build, version)
 }
 
-// GetDownloadURL constructs the download URL for a build
 func (c *Client) GetDownloadURL(project, version string, build int, filename string) string {
-	return fmt.Sprintf("%s/projects/%s/versions/%s/builds/%d/downloads/%s",
-		baseURL, project, version, build, filename)
+	return fmt.Sprintf(
+		"https://fill.papermc.io/v3/projects/%s/versions/%s/builds/%d/downloads/%s",
+		project,
+		version,
+		build,
+		filename,
+	)
 }
 
-// GetLatestBuild gets the latest build for a version
 func (c *Client) GetLatestBuild(ctx context.Context, project, version string) (*BuildInfo, error) {
 	vb, err := c.GetVersionBuilds(ctx, project, version)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(vb.Builds) == 0 {
-		return nil, fmt.Errorf("no builds available for version %s", version)
+	for _, build := range *vb {
+		if build.Channel == "STABLE" {
+			return &build, nil
+		}
 	}
 
-	// Get the latest build (last in the list)
-	latestBuild := vb.Builds[len(vb.Builds)-1]
-
-	return c.GetBuildInfo(ctx, project, version, latestBuild)
+	return nil, fmt.Errorf("no stable builds available for version %s", version)
 }

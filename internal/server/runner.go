@@ -110,11 +110,8 @@ func (r *Runner) Run(ctx context.Context, opts RunOptions) error {
 		}
 	}
 
-	// Find the server JAR to run
-	serverJar, err := FindServerJar(opts.Directory, opts.Mod, opts.Version)
-	if err != nil {
-		return fmt.Errorf("failed to find server JAR: %w", err)
-	}
+	// Use the exact JAR returned by the downloader.
+	serverJar := filepath.Join(opts.Directory, jar.Filename)
 
 	// Build and run command
 	args := r.buildJVMArgs(opts, serverJar)
@@ -207,8 +204,12 @@ func (r *Runner) buildJVMArgs(opts RunOptions, jarPath string) []string {
 	// Add custom JVM args
 	args = append(args, opts.JVMArgs...)
 
-	// JAR and nogui
-	args = append(args, "-jar", jarPath, "--nogui")
+	// JAR and server-specific arguments
+	args = append(args, "-jar", jarPath)
+
+	if opts.Mod != "velocity" {
+		args = append(args, "--nogui")
+	}
 
 	return args
 }
