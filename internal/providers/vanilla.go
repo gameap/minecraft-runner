@@ -101,7 +101,7 @@ func (p *VanillaProvider) GetServerJar(ctx context.Context, mcVersion, modVersio
 }
 
 // PostDownload handles post-download steps (none for vanilla)
-func (p *VanillaProvider) PostDownload(ctx context.Context, jarPath string, javaPath string) error {
+func (p *VanillaProvider) PostDownload(_ context.Context, _ string, _ *ServerJar, _ string) error {
 	return nil
 }
 

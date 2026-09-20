@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/gameap/minecraft-runner/internal/java"
-	"github.com/gameap/minecraft-runner/internal/providers"
 	"github.com/gameap/minecraft-runner/internal/server"
 )
 
@@ -30,35 +29,24 @@ var runCmd = &cobra.Command{
 	Short: "Download (if needed) and run a Minecraft server",
 	Long: `Downloads the specified Minecraft server (if not already present) and runs it.
 
+The server is stopped gracefully on SIGINT, SIGTERM and SIGHUP: it gets time to
+save the world before mcrun gives up and kills it.
+
 Examples:
   mcrun run                                    # Run latest vanilla server
   mcrun run --version=1.20.4                   # Run specific vanilla version
   mcrun run --mod=paper --version=1.20.4       # Run Paper server
-  mcrun run --mod=forge --version=1.20.4       # Run Forge server
+  mcrun run --mod=forge --version=1.20.1       # Run Forge server
+  mcrun run --mod=neoforge --version=1.21.1    # Run NeoForge server
   mcrun run --version=1.20.4 --memory=4G       # Run with 4GB memory`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Create context that cancels on interrupt
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+		defer stop()
 
-		// Handle interrupt signals
-		sigChan := make(chan os.Signal, 1)
-		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-		go func() {
-			<-sigChan
-			cancel()
-		}()
+		applyNetworkDefaults(cmd)
 
-		// Create provider registry
-		registry := createRegistry()
+		runner := server.NewRunner(createRegistry(), java.NewManager(cfg), cfg)
 
-		// Create Java manager
-		javaManager := java.NewManager(cfg)
-
-		// Create runner
-		runner := server.NewRunner(registry, javaManager, cfg)
-
-		// Run server
 		return runner.Run(ctx, server.RunOptions{
 			Version:      mcVersion,
 			Mod:          mod,
@@ -79,6 +67,29 @@ Examples:
 	},
 }
 
+// applyNetworkDefaults fills the network flags that were not given from the
+// per-server config
+func applyNetworkDefaults(cmd *cobra.Command) {
+	flags := cmd.Flags()
+	network := cfg.Server.Network
+
+	if !flags.Changed("ip") && network.IP != "" {
+		runIP = network.IP
+	}
+	if !flags.Changed("port") && network.Port != 0 {
+		runPort = network.Port
+	}
+	if !flags.Changed("query-port") && network.QueryPort != 0 {
+		runQueryPort = network.QueryPort
+	}
+	if !flags.Changed("rcon-port") && network.RconPort != 0 {
+		runRconPort = network.RconPort
+	}
+	if !flags.Changed("rcon-password") && network.RconPassword != "" {
+		runRconPassword = network.RconPassword
+	}
+}
+
 func init() {
 	rootCmd.AddCommand(runCmd)
 
@@ -91,22 +102,4 @@ func init() {
 	runCmd.Flags().StringVar(&runMinMemory, "min-memory", "", "initial heap size (e.g., '1G')")
 	runCmd.Flags().StringSliceVar(&runJVMArgs, "jvm-args", nil, "additional JVM arguments")
 	runCmd.Flags().BoolVar(&runAcceptEULA, "accept-eula", false, "automatically accept Minecraft EULA")
-}
-
-// createRegistry creates a provider registry with all providers
-func createRegistry() *providers.Registry {
-	registry := providers.NewRegistry()
-
-	registry.Register(providers.NewVanillaProvider())
-	registry.Register(providers.NewPaperProvider())
-	registry.Register(providers.NewFabricProvider())
-	registry.Register(providers.NewForgeProvider())
-	registry.Register(providers.NewSpigotProvider())
-	registry.Register(providers.NewCraftBukkitProvider())
-	registry.Register(providers.NewCauldronProvider())
-	registry.Register(providers.NewWaterfallProvider())
-	registry.Register(providers.NewVelocityProvider())
-	registry.Register(providers.NewBungeecordProvider())
-
-	return registry
 }

@@ -52,10 +52,16 @@ func (sp *ServerProperties) Get(key string) string {
 	return sp.properties[key]
 }
 
-// Set sets a property value
+// Set sets a property value. Values are kept the way they are written to the
+// file, so the value is escaped here, once, like java.util.Properties expects.
 func (sp *ServerProperties) Set(key, value string) {
-	sp.properties[key] = value
+	sp.properties[key] = propertyValueEscaper.Replace(value)
 }
+
+// propertyValueEscaper protects the characters java.util.Properties treats
+// specially in a value. A backslash in an RCON password would otherwise be
+// read by the server as the start of an escape sequence and silently dropped.
+var propertyValueEscaper = strings.NewReplacer("\\", "\\\\", "\n", "\\n", "\r", "\\r", "\t", "\\t")
 
 // SetIP sets the server IP
 func (sp *ServerProperties) SetIP(ip string) {

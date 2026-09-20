@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+
+	"github.com/gameap/minecraft-runner/internal/utils"
 )
 
 // Installation represents a detected Java installation
@@ -156,6 +158,9 @@ func (d *Detector) findJavaBinaries(searchPath string) []string {
 		}
 
 		if info.IsDir() {
+			if strings.HasPrefix(info.Name(), stagingPrefix) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 
@@ -191,12 +196,14 @@ func (d *Detector) getInstallationInfo(javaBin string) (*Installation, error) {
 	// Parse vendor
 	vendor := parseJavaVendor(outputStr)
 
-	// Detect architecture
-	arch := runtime.GOARCH
-	if strings.Contains(strings.ToLower(outputStr), "64-bit") || strings.Contains(outputStr, "amd64") {
-		arch = "x64"
-	} else if strings.Contains(outputStr, "aarch64") {
+	// "64-Bit" is printed by every 64-bit VM, so only an explicit architecture
+	// name in the output can refine what the host already tells
+	arch := utils.GetArch()
+	switch {
+	case strings.Contains(outputStr, "aarch64"):
 		arch = "aarch64"
+	case strings.Contains(outputStr, "amd64"):
+		arch = "x64"
 	}
 
 	return &Installation{

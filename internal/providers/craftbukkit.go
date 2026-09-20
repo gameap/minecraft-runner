@@ -7,7 +7,7 @@ import (
 
 // CraftBukkitProvider suggests Paper as a replacement for CraftBukkit
 type CraftBukkitProvider struct {
-	paper *PaperProvider
+	paper *FillProvider
 }
 
 // NewCraftBukkitProvider creates a new CraftBukkit provider
@@ -56,7 +56,7 @@ func (p *CraftBukkitProvider) GetServerJar(ctx context.Context, mcVersion, modVe
 }
 
 // PostDownload handles post-download steps
-func (p *CraftBukkitProvider) PostDownload(ctx context.Context, jarPath string, javaPath string) error {
+func (p *CraftBukkitProvider) PostDownload(_ context.Context, _ string, _ *ServerJar, _ string) error {
 	return nil
 }
 

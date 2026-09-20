@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"runtime"
 
 	"github.com/gameap/minecraft-runner/internal/utils"
@@ -132,9 +133,31 @@ func normalizeOS(goos string) string {
 		return "mac"
 	case "windows":
 		return "windows"
-	default:
-		return "linux"
 	}
+
+	if isMusl() {
+		return "alpine-linux"
+	}
+
+	return "linux"
+}
+
+// isMusl reports whether the system C library is musl, as on Alpine, where the
+// glibc builds of Temurin do not start. A glibc system that merely has the musl
+// package installed keeps its glibc loader and is not mistaken for one.
+func isMusl() bool {
+	musl, _ := filepath.Glob("/lib/ld-musl-*.so.1")
+	if len(musl) == 0 {
+		return false
+	}
+
+	for _, pattern := range []string{"/lib/ld-linux*.so*", "/lib64/ld-linux*.so*"} {
+		if glibc, _ := filepath.Glob(pattern); len(glibc) > 0 {
+			return false
+		}
+	}
+
+	return true
 }
 
 // normalizeArch converts Go's GOARCH to Adoptium API architecture names
