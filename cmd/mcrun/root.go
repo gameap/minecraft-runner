@@ -94,7 +94,7 @@ func applyConfigDefaults(cmd *cobra.Command) {
 	if !flags.Changed("mod-version") && cfg.Defaults.ModVersion != "" {
 		modVersion = cfg.Defaults.ModVersion
 	}
-	if !flags.Changed("java") && cfg.Java.Version != 0 {
+	if !flags.Changed("java") && cfg.Java.Version > 0 {
 		javaVersion = cfg.Java.Version
 	}
 	if !flags.Changed("java-path") && cfg.Java.Path != "" {

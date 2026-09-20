@@ -45,6 +45,39 @@ func TestJavaEnvironment(t *testing.T) {
 		}
 	})
 
+	t.Run("JAVA_HOME follows a symlinked binary to the real installation", func(t *testing.T) {
+		root := t.TempDir()
+
+		realBin := filepath.Join(root, "lib", "jvm", "jdk-17", "bin")
+		linkBin := filepath.Join(root, "usr", "bin")
+		for _, dir := range []string{realBin, linkBin} {
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.WriteFile(filepath.Join(realBin, "java"), nil, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		link := filepath.Join(linkBin, "java")
+		if err := os.Symlink(filepath.Join(realBin, "java"), link); err != nil {
+			t.Skipf("symlinks are not available: %v", err)
+		}
+
+		realHome, err := filepath.EvalSymlinks(filepath.Dir(realBin))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		got := javaEnvironment([]string{"PATH=/usr/bin"}, link)
+
+		// The selected binary stays the one found through PATH; only the home is resolved
+		want := []string{"PATH=" + linkBin + sep + "/usr/bin", "JAVA_HOME=" + realHome}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("env = %v, want %v", got, want)
+		}
+	})
+
 	t.Run("a binary outside a bin directory sets no JAVA_HOME", func(t *testing.T) {
 		got := javaEnvironment([]string{"PATH=/usr/bin"}, filepath.Join(string(filepath.Separator)+"custom", "java"))
 

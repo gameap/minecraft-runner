@@ -46,11 +46,30 @@ func javaEnvironment(environ []string, javaBinary string) []string {
 	}
 	env = append(env, "PATH="+path)
 
-	if filepath.Base(binDir) == "bin" {
-		env = append(env, "JAVA_HOME="+filepath.Dir(binDir))
+	if javaHome := javaHomeOf(javaBinary); javaHome != "" {
+		env = append(env, "JAVA_HOME="+javaHome)
 	}
 
 	return env
+}
+
+// javaHomeOf returns the Java home a binary belongs to, or "" when it cannot be
+// told. A path given by the user is often a symlink - /usr/bin/java points
+// through /etc/alternatives into the real JDK - and taking its directory at face
+// value would announce /usr as the Java home. PATH keeps the selected path, so
+// "java" still resolves to the very binary that was chosen.
+func javaHomeOf(javaBinary string) string {
+	resolved, err := filepath.EvalSymlinks(javaBinary)
+	if err != nil {
+		resolved = javaBinary
+	}
+
+	binDir := filepath.Dir(resolved)
+	if filepath.Base(binDir) != "bin" {
+		return ""
+	}
+
+	return filepath.Dir(binDir)
 }
 
 // envKeyEquals compares environment variable names, which Windows treats case-insensitively

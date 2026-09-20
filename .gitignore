@@ -24,5 +24,7 @@
 /versions/
 /whitelist.json
 /world/
-/.mcrun-state.json
+
+# Names no source file shares, ignored wherever a test server was run
+.mcrun-state.json
 *.bak

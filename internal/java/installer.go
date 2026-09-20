@@ -65,8 +65,11 @@ func (i *Installer) Install(ctx context.Context, version int, opts InstallOption
 		return nil, fmt.Errorf("failed to create temporary archive: %w", err)
 	}
 	archivePath := archive.Name()
-	archive.Close()
 	defer os.Remove(archivePath)
+
+	if err := archive.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close temporary archive %s: %w", archivePath, err)
+	}
 
 	if err := i.http.DownloadFile(ctx, asset.Binary.Package.Link, archivePath); err != nil {
 		return nil, fmt.Errorf("failed to download Java: %w", err)

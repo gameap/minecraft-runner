@@ -96,7 +96,9 @@ func (r *Runner) Run(ctx context.Context, opts RunOptions) error {
 	inst, javaInst, err := r.prepare(ctx, provider, opts)
 	if err != nil {
 		if ctx.Err() != nil {
-			return nil
+			// The error is the interrupted download or installer: a stop that was
+			// requested before the server came up is not a failure to report
+			return nil //nolint:nilerr // intentional, see above
 		}
 		return err
 	}

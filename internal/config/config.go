@@ -178,15 +178,16 @@ func mergeLocalConfig(cfg *Config, local *ServerLocalConfig) {
 	}
 
 	// A path next to a version pins the binary of that Java version; a path on
-	// its own is the binary to run the server with
+	// its own is the binary to run the server with. A version that is not
+	// positive counts as not set.
 	switch {
-	case local.Java.Version != 0 && local.Java.Path != "":
+	case local.Java.Version > 0 && local.Java.Path != "":
 		if cfg.Java.Paths == nil {
 			cfg.Java.Paths = make(map[int]string)
 		}
 		cfg.Java.Paths[local.Java.Version] = local.Java.Path
 		cfg.Java.Version = local.Java.Version
-	case local.Java.Version != 0:
+	case local.Java.Version > 0:
 		cfg.Java.Version = local.Java.Version
 	case local.Java.Path != "":
 		cfg.Java.Path = local.Java.Path

@@ -76,13 +76,13 @@ func applyNetworkDefaults(cmd *cobra.Command) {
 	if !flags.Changed("ip") && network.IP != "" {
 		runIP = network.IP
 	}
-	if !flags.Changed("port") && network.Port != 0 {
+	if !flags.Changed("port") && network.Port > 0 {
 		runPort = network.Port
 	}
-	if !flags.Changed("query-port") && network.QueryPort != 0 {
+	if !flags.Changed("query-port") && network.QueryPort > 0 {
 		runQueryPort = network.QueryPort
 	}
-	if !flags.Changed("rcon-port") && network.RconPort != 0 {
+	if !flags.Changed("rcon-port") && network.RconPort > 0 {
 		runRconPort = network.RconPort
 	}
 	if !flags.Changed("rcon-password") && network.RconPassword != "" {
