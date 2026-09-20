@@ -7,7 +7,7 @@ import (
 
 // SpigotProvider suggests Paper as a replacement for Spigot
 type SpigotProvider struct {
-	paper *PaperProvider
+	paper *FillProvider
 }
 
 // NewSpigotProvider creates a new Spigot provider
@@ -56,7 +56,7 @@ func (p *SpigotProvider) GetServerJar(ctx context.Context, mcVersion, modVersion
 }
 
 // PostDownload handles post-download steps
-func (p *SpigotProvider) PostDownload(ctx context.Context, jarPath string, javaPath string) error {
+func (p *SpigotProvider) PostDownload(_ context.Context, _ string, _ *ServerJar, _ string) error {
 	return nil
 }
 

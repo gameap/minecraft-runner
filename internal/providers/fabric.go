@@ -33,10 +33,15 @@ func (p *FabricProvider) ListVersions(ctx context.Context) ([]VersionInfo, error
 
 	versions := make([]VersionInfo, 0, len(gameVersions))
 	for _, v := range gameVersions {
+		vType := "release"
+		if !v.Stable {
+			vType = "snapshot"
+		}
+
 		versions = append(versions, VersionInfo{
 			MinecraftVersion: v.Version,
 			IsStable:         v.Stable,
-			Type:             "release",
+			Type:             vType,
 		})
 	}
 
@@ -121,7 +126,7 @@ func (p *FabricProvider) GetServerJar(ctx context.Context, mcVersion, modVersion
 }
 
 // PostDownload handles post-download steps (none for Fabric)
-func (p *FabricProvider) PostDownload(ctx context.Context, jarPath string, javaPath string) error {
+func (p *FabricProvider) PostDownload(_ context.Context, _ string, _ *ServerJar, _ string) error {
 	return nil
 }
 

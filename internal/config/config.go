@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -19,6 +20,7 @@ type Config struct {
 type DefaultsConfig struct {
 	Version    string `yaml:"version"`
 	Mod        string `yaml:"mod"`
+	ModVersion string `yaml:"mod_version"`
 	AcceptEULA bool   `yaml:"accept_eula"`
 	Memory     string `yaml:"memory"`
 	MinMemory  string `yaml:"min_memory"`
@@ -29,12 +31,21 @@ type JavaConfig struct {
 	PreferBundled bool           `yaml:"prefer_bundled"`
 	AutoInstall   bool           `yaml:"auto_install"`
 	Paths         map[int]string `yaml:"paths"`
+
+	// Version and Path come from the per-server config and act as the
+	// defaults of the --java and --java-path flags
+	Version int    `yaml:"-"`
+	Path    string `yaml:"-"`
 }
 
 // ServerConfig contains server-related settings
 type ServerConfig struct {
 	JVMArgs    []string          `yaml:"jvm_args"`
 	Properties map[string]string `yaml:"properties"`
+
+	// Network comes from the per-server config and acts as the defaults of
+	// the --ip, --port, --query-port and --rcon-* flags
+	Network ServerLocalValues `yaml:"-"`
 }
 
 // CacheConfig contains cache settings
@@ -118,7 +129,7 @@ func Load(configPath string, serverDir string) (*Config, error) {
 
 	if globalPath != "" {
 		if err := loadFromFile(globalPath, cfg); err != nil && !os.IsNotExist(err) {
-			return nil, err
+			return nil, fmt.Errorf("failed to load %s: %w", globalPath, err)
 		}
 	}
 
@@ -126,8 +137,11 @@ func Load(configPath string, serverDir string) (*Config, error) {
 	if serverDir != "" {
 		localPath := filepath.Join(serverDir, ".mcrun.yaml")
 		localCfg := &ServerLocalConfig{}
-		if err := loadFromFile(localPath, localCfg); err == nil {
-			// Merge local config into main config
+		err := loadFromFile(localPath, localCfg)
+		if err != nil && !os.IsNotExist(err) {
+			return nil, fmt.Errorf("failed to load %s: %w", localPath, err)
+		}
+		if err == nil {
 			mergeLocalConfig(cfg, localCfg)
 		}
 	}
@@ -153,19 +167,37 @@ func mergeLocalConfig(cfg *Config, local *ServerLocalConfig) {
 	if local.Mod != "" {
 		cfg.Defaults.Mod = local.Mod
 	}
+	if local.ModVersion != "" {
+		cfg.Defaults.ModVersion = local.ModVersion
+	}
 	if local.Java.Memory != "" {
 		cfg.Defaults.Memory = local.Java.Memory
 	}
 	if local.Java.MinMem != "" {
 		cfg.Defaults.MinMemory = local.Java.MinMem
 	}
-	if local.Java.Version != 0 {
-		// Store in paths map for later lookup
+
+	// A path next to a version pins the binary of that Java version; a path on
+	// its own is the binary to run the server with. A version that is not
+	// positive counts as not set.
+	switch {
+	case local.Java.Version > 0 && local.Java.Path != "":
+		if cfg.Java.Paths == nil {
+			cfg.Java.Paths = make(map[int]string)
+		}
 		cfg.Java.Paths[local.Java.Version] = local.Java.Path
+		cfg.Java.Version = local.Java.Version
+	case local.Java.Version > 0:
+		cfg.Java.Version = local.Java.Version
+	case local.Java.Path != "":
+		cfg.Java.Path = local.Java.Path
 	}
+
 	if len(local.Java.Args) > 0 {
 		cfg.Server.JVMArgs = append(cfg.Server.JVMArgs, local.Java.Args...)
 	}
+
+	cfg.Server.Network = local.Server
 }
 
 // Save saves the config to a file

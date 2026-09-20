@@ -25,6 +25,11 @@ func (p *BungeecordProvider) Name() string {
 	return "bungeecord"
 }
 
+// IsProxy reports that Bungeecord is a proxy rather than a game server
+func (p *BungeecordProvider) IsProxy() bool {
+	return true
+}
+
 // ListVersions returns available builds (Bungeecord doesn't have versions, only builds)
 func (p *BungeecordProvider) ListVersions(ctx context.Context) ([]VersionInfo, error) {
 	builds, err := p.client.GetBuilds(ctx)
@@ -102,7 +107,7 @@ func (p *BungeecordProvider) GetServerJar(ctx context.Context, _, modVersion str
 }
 
 // PostDownload handles post-download steps (none for Bungeecord)
-func (p *BungeecordProvider) PostDownload(ctx context.Context, jarPath string, javaPath string) error {
+func (p *BungeecordProvider) PostDownload(_ context.Context, _ string, _ *ServerJar, _ string) error {
 	return nil
 }
 

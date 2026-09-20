@@ -11,6 +11,10 @@ import (
 	"github.com/gameap/minecraft-runner/pkg/api/adoptium"
 )
 
+// stagingPrefix names the directories a Java archive is extracted into before
+// the finished Java home is moved into place; the detector skips them
+const stagingPrefix = ".install-"
+
 // InstallOptions contains options for Java installation
 type InstallOptions struct {
 	SystemWide bool   // Install to system directory vs local
@@ -53,32 +57,51 @@ func (i *Installer) Install(ctx context.Context, version int, opts InstallOption
 
 	fmt.Printf("Downloading Java %d (%s)...\n", version, asset.Version.Semver)
 
-	// Download the archive
-	archivePath := filepath.Join(os.TempDir(), asset.Binary.Package.Name)
+	// Several servers may start at once and all find Java missing. Each one
+	// downloads into a file of its own and extracts into a staging directory,
+	// so that no process ever sees a half-written archive or Java home.
+	archive, err := os.CreateTemp("", "mcrun-java-*-"+asset.Binary.Package.Name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temporary archive: %w", err)
+	}
+	archivePath := archive.Name()
+	defer os.Remove(archivePath)
+
+	if err := archive.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close temporary archive %s: %w", archivePath, err)
+	}
+
 	if err := i.http.DownloadFile(ctx, asset.Binary.Package.Link, archivePath); err != nil {
 		return nil, fmt.Errorf("failed to download Java: %w", err)
 	}
-	defer os.Remove(archivePath)
 
-	// Verify checksum
 	fmt.Println("Verifying checksum...")
 	if err := utils.VerifySHA256(archivePath, asset.Binary.Package.Checksum); err != nil {
 		return nil, fmt.Errorf("checksum verification failed: %w", err)
 	}
 
-	// Extract archive
 	fmt.Println("Extracting...")
-	var javaHome string
+	staging, err := os.MkdirTemp(installDir, stagingPrefix+"*")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create staging directory: %w", err)
+	}
+	defer os.RemoveAll(staging)
+
+	var extracted string
 	if runtime.GOOS == "windows" {
-		javaHome, err = utils.ExtractZip(archivePath, installDir)
+		extracted, err = utils.ExtractZip(archivePath, staging)
 	} else {
-		javaHome, err = utils.ExtractTarGz(archivePath, installDir)
+		extracted, err = utils.ExtractTarGz(archivePath, staging)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract Java: %w", err)
 	}
 
-	// Find java binary
+	javaHome, err := i.promote(extracted, staging, installDir, version)
+	if err != nil {
+		return nil, err
+	}
+
 	javaBin := i.findJavaBinary(javaHome)
 	if javaBin == "" {
 		return nil, fmt.Errorf("could not find java binary in extracted archive")
@@ -100,6 +123,33 @@ func (i *Installer) Install(ctx context.Context, version int, opts InstallOption
 		IsSystem:    opts.SystemWide,
 		Arch:        runtime.GOARCH,
 	}, nil
+}
+
+// promote moves an extracted Java home out of the staging directory into its
+// final place. If another process got there first, its copy is used instead.
+func (i *Installer) promote(extracted, staging, installDir string, version int) (string, error) {
+	name := filepath.Base(extracted)
+	if filepath.Clean(extracted) == filepath.Clean(staging) {
+		name = fmt.Sprintf("java-%d", version)
+	}
+
+	javaHome := filepath.Join(installDir, name)
+
+	if i.findJavaBinary(javaHome) != "" {
+		return javaHome, nil
+	}
+
+	// A home without a java binary is the leftover of an interrupted install
+	os.RemoveAll(javaHome)
+
+	if err := os.Rename(extracted, javaHome); err != nil {
+		if i.findJavaBinary(javaHome) != "" {
+			return javaHome, nil
+		}
+		return "", fmt.Errorf("failed to move Java into %s: %w", javaHome, err)
+	}
+
+	return javaHome, nil
 }
 
 // getInstallDir determines the installation directory
