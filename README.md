@@ -93,13 +93,53 @@ that exact version is not in the server directory yet, and starts it:
 
 - Without `--mod-version` the newest build is used, so a restart picks up a new Paper
   build or a new recommended Forge. The JAR a newer build replaced is removed.
-- Installer-based servers (Forge, NeoForge, Quilt) are installed once per version. Forge
+- Installer-based servers (Forge, NeoForge, Quilt) are installed once per version; an
+  install that failed or was interrupted is repeated on the next start. Forge
   1.17+ and NeoForge are started from the JVM argument file the installer writes
   (`@libraries/.../unix_args.txt`), older Forge from its JAR. A `user_jvm_args.txt` in
   the server directory is honoured; `--memory` and `--min-memory` win over it.
 - What was installed is recorded in `.mcrun-state.json`. When the provider's API cannot
   be reached, the installed server is started with a warning instead of failing - as
   long as it matches the requested mod and version.
+
+#### Unreachable download sources
+
+Every download goes to its source first. When the source cannot be reached (name
+resolution, connection, TLS, timeouts), keeps answering with 5xx or 429, or refuses the
+client with 403 or 451, the same request is made through the GameAP mirror:
+`https://mirror.gameap.com`, then `https://mirror.gameap.ru`. A 404 is final. A host that
+could not be reached is not tried again during the run, and a warning names it once.
+The mirror serves only what mcrun needs and the files are checked against the same
+checksums as direct downloads.
+
+Installers and servers download libraries and the vanilla server on their first start,
+and they know nothing about the mirror. mcrun puts these files in place before it starts
+them, so a first start needs no network:
+
+| Server                                 | Prepared by mcrun                                                          |
+|----------------------------------------|----------------------------------------------------------------------------|
+| Paper, Folia, Purpur, Pufferfish, Leaf | the vanilla server Paperclip patches; Leaf 26.2+ also its libraries        |
+| Waterfall, BungeeCord up to #2107      | the proxy modules                                                          |
+| Fabric                                 | libraries, the vanilla server and the launch jar                           |
+| Quilt                                  | the whole installation; the Quilt installer is not run                     |
+| Forge, NeoForge                        | libraries, the vanilla server and Mojang's mappings; installer `--offline` |
+| Mohist, Cauldron                       | the libraries of `libraries.txt` / `mohist_libraries.txt`                  |
+| Banner                                 | libraries, the Fabric loader and the vanilla server                        |
+| SpongeVanilla                          | libraries, the vanilla server and Mojang's mappings                        |
+
+Known limits:
+
+- SpongeVanilla reads Mojang's version manifest itself on every start and, when Mojang
+  is out of reach, falls back on the server it has. For 26.x mcrun puts that server in
+  place, so no start needs Mojang. 1.16.5 needs Mojang on the first start only, to remap
+  the server. 1.18.2 to 1.21.11 need it on every start: their fallback picks the server
+  before remapping, which does not start.
+- Fabric loaders before 0.12.6 get only the vanilla server; their launcher downloads the
+  rest.
+- Forge installers without `--offline` support run online, as before.
+
+`MCRUN_MIRRORS` replaces the mirror list (comma-separated base URLs) or turns the
+fallback off with `MCRUN_MIRRORS=off`. It is meant for tests and emergencies.
 
 #### Stopping and console input
 

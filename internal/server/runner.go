@@ -70,6 +70,7 @@ type installation struct {
 	version    string
 	launch     providers.LaunchTarget
 	serverArgs []string
+	jar        *providers.ServerJar
 }
 
 // NewRunner creates a new server runner
@@ -148,6 +149,14 @@ func (r *Runner) prepare(
 			return nil, nil, err
 		}
 
+		// What a previous run prepared is most likely still there
+		if err := r.prepareFiles(ctx, provider, opts.Directory, inst.jar); err != nil {
+			if ctx.Err() != nil {
+				return nil, nil, ctx.Err()
+			}
+			fmt.Printf("[WARNING] %v\n", err)
+		}
+
 		javaInst, err := r.findJava(ctx, opts, provider, inst.version)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to find Java: %w", err)
@@ -166,10 +175,15 @@ func (r *Runner) prepare(
 		return nil, nil, err
 	}
 
+	if err := r.prepareFiles(ctx, provider, opts.Directory, jar); err != nil {
+		return nil, nil, err
+	}
+
 	inst := &installation{
 		version:    jar.Version,
 		launch:     *launch,
 		serverArgs: jar.ServerArgs,
+		jar:        jar,
 	}
 
 	r.recordInstall(opts, jar, inst)
@@ -177,12 +191,16 @@ func (r *Runner) prepare(
 	return inst, javaInst, nil
 }
 
-// install downloads and installs the server unless that exact version is already in place
+// install downloads and installs the server unless that exact version is
+// already in place. What an installer that did not finish left behind does
+// not count as installed.
 func (r *Runner) install(
 	ctx context.Context, provider providers.Provider, jar *providers.ServerJar, javaPath, directory string,
 ) (*providers.LaunchTarget, error) {
-	if target := r.resolveLaunch(provider, directory, jar); target != nil {
-		return target, nil
+	if !installUnfinished(directory) {
+		if target := r.resolveLaunch(provider, directory, jar); target != nil {
+			return target, nil
+		}
 	}
 
 	if err := r.downloader.Fetch(ctx, directory, jar, false); err != nil {
@@ -190,9 +208,15 @@ func (r *Runner) install(
 	}
 
 	if jar.RequiresInstall {
+		if err := startInstall(directory); err != nil {
+			return nil, err
+		}
 		if err := provider.PostDownload(ctx, directory, jar, javaPath); err != nil {
 			return nil, fmt.Errorf("post-download failed: %w", err)
 		}
+	}
+	if err := finishInstall(directory); err != nil {
+		return nil, err
 	}
 
 	target := r.resolveLaunch(provider, directory, jar)
@@ -202,6 +226,22 @@ func (r *Runner) install(
 	}
 
 	return target, nil
+}
+
+// prepareFiles puts in place what the server would download on start
+func (r *Runner) prepareFiles(
+	ctx context.Context, provider providers.Provider, directory string, jar *providers.ServerJar,
+) error {
+	preparer, ok := provider.(providers.Preparer)
+	if !ok || jar == nil {
+		return nil
+	}
+
+	if err := preparer.Prepare(ctx, directory, jar); err != nil {
+		return fmt.Errorf("failed to prepare the %s server: %w", provider.Name(), err)
+	}
+
+	return nil
 }
 
 func (r *Runner) resolveLaunch(
@@ -232,6 +272,9 @@ func (r *Runner) installedFallback(opts RunOptions, cause error) (*installation,
 	if !state.Matches(opts.Mod, opts.Version, opts.ModVersion) || !launchFilesExist(opts.Directory, state.Launch) {
 		return nil, failure
 	}
+	if installUnfinished(opts.Directory) {
+		return nil, fmt.Errorf("%w; the last install did not finish", failure)
+	}
 
 	fmt.Printf("[WARNING] Could not resolve the %s server to run: %v\n", opts.Mod, cause)
 	fmt.Printf("  Starting the installed %s %s instead\n\n", state.Mod, state.Version)
@@ -240,6 +283,7 @@ func (r *Runner) installedFallback(opts RunOptions, cause error) (*installation,
 		version:    state.Version,
 		launch:     state.Launch,
 		serverArgs: state.ServerArgs,
+		jar:        &providers.ServerJar{Version: state.Version, ModVersion: state.ModVersion, Filename: state.File},
 	}, nil
 }
 

@@ -164,6 +164,12 @@ func (p *SpongeVanillaProvider) PostDownload(_ context.Context, _ string, _ *Ser
 	return nil
 }
 
+// Prepare puts in place the libraries and the vanilla server the installer
+// would download on start
+func (p *SpongeVanillaProvider) Prepare(ctx context.Context, dir string, jar *ServerJar) error {
+	return prepareSponge(ctx, dir, jar)
+}
+
 // GetRecommendedJavaVersion returns the recommended Java version
 func (p *SpongeVanillaProvider) GetRecommendedJavaVersion(ctx context.Context, mcVersion string) int {
 	return GetRecommendedJavaVersion(ctx, mcVersion)

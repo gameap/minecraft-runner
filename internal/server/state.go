@@ -11,7 +11,14 @@ import (
 	"github.com/gameap/minecraft-runner/internal/providers"
 )
 
-const stateFileName = ".mcrun-state.json"
+const (
+	stateFileName = ".mcrun-state.json"
+
+	// installMarkerName is kept in the server directory while an installer
+	// runs. A failed installer can leave files behind that look launchable,
+	// such as Forge's argument file written before its processors failed.
+	installMarkerName = ".mcrun-installing"
+)
 
 // State records the server mcrun last installed into a directory. It lets a
 // server start while the provider's API is unreachable and tells which JAR a
@@ -108,4 +115,26 @@ func launchFilesExist(directory string, target providers.LaunchTarget) bool {
 	}
 
 	return true
+}
+
+// installUnfinished tells whether an installer run in directory did not finish
+func installUnfinished(directory string) bool {
+	_, err := os.Stat(filepath.Join(directory, installMarkerName))
+	return err == nil
+}
+
+// startInstall marks an installer run that has not finished yet
+func startInstall(directory string) error {
+	if err := os.WriteFile(filepath.Join(directory, installMarkerName), nil, 0644); err != nil {
+		return fmt.Errorf("failed to write %s: %w", installMarkerName, err)
+	}
+	return nil
+}
+
+// finishInstall clears the mark of an unfinished installer run
+func finishInstall(directory string) error {
+	if err := os.Remove(filepath.Join(directory, installMarkerName)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("failed to remove %s: %w", installMarkerName, err)
+	}
+	return nil
 }

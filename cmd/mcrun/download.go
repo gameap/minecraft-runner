@@ -45,7 +45,9 @@ Examples:
 		if jar.ModVersion != "" {
 			fmt.Printf("  Mod Version: %s\n", jar.ModVersion)
 		}
-		fmt.Printf("  File: %s\n", jar.Filename)
+		if jar.URL != "" {
+			fmt.Printf("  File: %s\n", jar.Filename)
+		}
 
 		if jar.RequiresInstall {
 			fmt.Println("\n[WARNING] This server requires installation.")

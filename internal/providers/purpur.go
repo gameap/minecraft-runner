@@ -141,6 +141,11 @@ func (p *PurpurProvider) PostDownload(_ context.Context, _ string, _ *ServerJar,
 	return nil
 }
 
+// Prepare puts the vanilla server the launcher patches in place
+func (p *PurpurProvider) Prepare(ctx context.Context, dir string, jar *ServerJar) error {
+	return preparePaperclip(ctx, dir, jar)
+}
+
 // GetRecommendedJavaVersion returns the recommended Java version
 func (p *PurpurProvider) GetRecommendedJavaVersion(ctx context.Context, mcVersion string) int {
 	return GetRecommendedJavaVersion(ctx, mcVersion)

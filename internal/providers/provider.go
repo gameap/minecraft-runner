@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"time"
+
+	"github.com/gameap/minecraft-runner/internal/preseed"
 )
 
 // ServerJar contains information about a downloadable server JAR
@@ -18,6 +20,10 @@ type ServerJar struct {
 	Filename        string   // Suggested filename
 	RequiresInstall bool     // True if post-download installation is needed (e.g., Forge)
 	ServerArgs      []string // Program arguments; empty means the runner default
+
+	// Extras are further files the server downloads on its own, known when
+	// the JAR is resolved; see Preparer
+	Extras []preseed.File
 }
 
 // LaunchTarget describes how an installed server is started.
@@ -66,6 +72,15 @@ type Provider interface {
 // nil when that exact version is not installed in dir.
 type LaunchResolver interface {
 	ResolveLaunch(dir string, jar *ServerJar) *LaunchTarget
+}
+
+// Preparer is implemented by providers whose server downloads more files on
+// its own: the vanilla server it patches, libraries, modules. Prepare puts
+// them into dir beforehand through mcrun's downloads, which check checksums
+// and fall back to the mirrors, so the server needs no network. It runs before
+// every start and costs no requests once the files are in place.
+type Preparer interface {
+	Prepare(ctx context.Context, dir string, jar *ServerJar) error
 }
 
 // ProxyProvider is implemented by proxy servers, which have neither an EULA

@@ -79,6 +79,11 @@ func (p *CauldronProvider) PostDownload(ctx context.Context, dir string, jar *Se
 	return p.mohist.PostDownload(ctx, dir, jar, javaPath)
 }
 
+// Prepare puts in place the libraries the server would download on start
+func (p *CauldronProvider) Prepare(ctx context.Context, dir string, jar *ServerJar) error {
+	return p.mohist.Prepare(ctx, dir, jar)
+}
+
 // GetRecommendedJavaVersion returns the recommended Java version
 func (p *CauldronProvider) GetRecommendedJavaVersion(_ context.Context, _ string) int {
 	return 8

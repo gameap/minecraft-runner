@@ -171,7 +171,7 @@ func (p *NeoForgeProvider) ResolveLaunch(dir string, jar *ServerJar) *LaunchTarg
 func (p *NeoForgeProvider) PostDownload(ctx context.Context, dir string, jar *ServerJar, javaPath string) error {
 	fmt.Println("Running NeoForge installer...")
 
-	if err := runInstaller(ctx, javaPath, dir, jar.Filename, "--installServer"); err != nil {
+	if err := installForge(ctx, javaPath, dir, jar.Filename, "NeoForge"); err != nil {
 		return installerError("NeoForge", err)
 	}
 

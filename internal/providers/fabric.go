@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/gameap/minecraft-runner/internal/preseed"
+	"github.com/gameap/minecraft-runner/internal/utils"
 	"github.com/gameap/minecraft-runner/pkg/api/fabric"
+	"github.com/gameap/minecraft-runner/pkg/api/mojang"
 )
 
 // FabricProvider provides Fabric server downloads
@@ -128,6 +131,12 @@ func (p *FabricProvider) GetServerJar(ctx context.Context, mcVersion, modVersion
 // PostDownload handles post-download steps (none for Fabric)
 func (p *FabricProvider) PostDownload(_ context.Context, _ string, _ *ServerJar, _ string) error {
 	return nil
+}
+
+// Prepare puts in place what the Fabric server launcher would install on its
+// first start: the vanilla server, the libraries and the launch jar
+func (p *FabricProvider) Prepare(ctx context.Context, dir string, jar *ServerJar) error {
+	return preseed.Fabric(ctx, utils.NewHTTPClient(false), mojang.NewClient(), dir, jar.Version, jar.ModVersion)
 }
 
 // GetRecommendedJavaVersion returns the recommended Java version

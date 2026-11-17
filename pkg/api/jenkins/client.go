@@ -138,6 +138,29 @@ func (c *Client) GetLastSuccessfulBuild(ctx context.Context) (*BuildInfo, error)
 	return &build, nil
 }
 
+// GetFingerprints returns the MD5 of the files a build produced, keyed by
+// their Maven-style name, e.g. net.md-5:cmd_alert.jar
+func (c *Client) GetFingerprints(ctx context.Context, number int) (map[string]string, error) {
+	var response struct {
+		Fingerprint []struct {
+			FileName string `json:"fileName"`
+			Hash     string `json:"hash"`
+		} `json:"fingerprint"`
+	}
+
+	url := fmt.Sprintf("%s/%d/api/json?tree=fingerprint%%5BfileName,hash%%5D", c.baseURL, number)
+	if err := c.get(ctx, url, &response); err != nil {
+		return nil, fmt.Errorf("failed to fetch build fingerprints: %w", err)
+	}
+
+	result := make(map[string]string, len(response.Fingerprint))
+	for _, f := range response.Fingerprint {
+		result[f.FileName] = f.Hash
+	}
+
+	return result, nil
+}
+
 // GetArtifactURL constructs the download URL for an artifact
 func (c *Client) GetArtifactURL(buildNumber int, relativePath string) string {
 	return fmt.Sprintf("%s/%d/artifact/%s", c.baseURL, buildNumber, relativePath)

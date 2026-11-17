@@ -21,6 +21,7 @@ type fakeProvider struct {
 	resolveErr error
 	launch     *providers.LaunchTarget
 	installs   []string
+	installErr error
 
 	installCalls int
 }
@@ -61,7 +62,7 @@ func (p *fakeProvider) PostDownload(_ context.Context, dir string, _ *providers.
 			return err
 		}
 	}
-	return nil
+	return p.installErr
 }
 
 func (p *fakeProvider) GetRecommendedJavaVersion(context.Context, string) int { return 21 }
@@ -287,6 +288,38 @@ func TestInstall(t *testing.T) {
 		}
 	})
 
+	t.Run("a failed installer run is repeated", func(t *testing.T) {
+		dir := t.TempDir()
+		argFile := "libraries/net/minecraftforge/forge/1.20.1-47.4.10/unix_args.txt"
+		writeFile(t, dir, "forge-installer.jar")
+
+		provider := &fakeInstallerProvider{fakeProvider{
+			name: "forge",
+			jar: &providers.ServerJar{
+				Version: "1.20.1", ModVersion: "47.4.10", Filename: "forge-installer.jar", RequiresInstall: true,
+			},
+			launch:     &providers.LaunchTarget{ArgFiles: []string{argFile}},
+			installs:   []string{argFile},
+			installErr: errors.New("processor failed"),
+		}}
+		runner := newTestRunner(provider)
+
+		if _, err := runner.install(context.Background(), provider, provider.jar, "java", dir); err == nil {
+			t.Fatal("expected the installer error")
+		}
+
+		provider.installErr = nil
+		if _, err := runner.install(context.Background(), provider, provider.jar, "java", dir); err != nil {
+			t.Fatalf("second install: %v", err)
+		}
+		if provider.installCalls != 2 {
+			t.Errorf("installer ran %d times, want 2", provider.installCalls)
+		}
+		if installUnfinished(dir) {
+			t.Error("a finished install is still marked unfinished")
+		}
+	})
+
 	t.Run("an installer that leaves nothing to launch is an error", func(t *testing.T) {
 		dir := t.TempDir()
 		writeFile(t, dir, "forge-installer.jar")
@@ -358,6 +391,17 @@ func TestInstalledFallback(t *testing.T) {
 	t.Run("a state whose files are gone is useless", func(t *testing.T) {
 		dir, runner := setup(t)
 		os.Remove(filepath.Join(dir, "paper-1.21.8-60.jar"))
+
+		if _, err := runner.installedFallback(RunOptions{Mod: "paper", Directory: dir}, cause); !errors.Is(err, cause) {
+			t.Errorf("err = %v, want the resolve error", err)
+		}
+	})
+
+	t.Run("an install that did not finish is not started", func(t *testing.T) {
+		dir, runner := setup(t)
+		if err := startInstall(dir); err != nil {
+			t.Fatal(err)
+		}
 
 		if _, err := runner.installedFallback(RunOptions{Mod: "paper", Directory: dir}, cause); !errors.Is(err, cause) {
 			t.Errorf("err = %v, want the resolve error", err)

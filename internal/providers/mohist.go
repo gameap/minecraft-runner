@@ -168,6 +168,11 @@ func (p *MohistProvider) PostDownload(_ context.Context, _ string, _ *ServerJar,
 	return nil
 }
 
+// Prepare puts in place the libraries the server would download on start
+func (p *MohistProvider) Prepare(ctx context.Context, dir string, jar *ServerJar) error {
+	return prepareMohist(ctx, dir, jar)
+}
+
 // GetRecommendedJavaVersion returns the recommended Java version
 func (p *MohistProvider) GetRecommendedJavaVersion(ctx context.Context, mcVersion string) int {
 	return GetRecommendedJavaVersion(ctx, mcVersion)

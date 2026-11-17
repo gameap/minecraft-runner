@@ -73,8 +73,13 @@ func (d *Downloader) Resolve(ctx context.Context, opts DownloadOptions) (*provid
 	return jar, nil
 }
 
-// Fetch downloads a resolved JAR into the directory unless a verified copy is already there
+// Fetch downloads a resolved JAR into the directory unless a verified copy is
+// already there. A server without a URL is installed by its provider alone.
 func (d *Downloader) Fetch(ctx context.Context, directory string, jar *providers.ServerJar, force bool) error {
+	if jar.URL == "" {
+		return nil
+	}
+
 	targetPath := filepath.Join(directory, jar.Filename)
 
 	if !force && d.IsDownloaded(directory, jar) {

@@ -166,7 +166,7 @@ func (p *ForgeProvider) ResolveLaunch(dir string, jar *ServerJar) *LaunchTarget 
 func (p *ForgeProvider) PostDownload(ctx context.Context, dir string, jar *ServerJar, javaPath string) error {
 	fmt.Println("Running Forge installer...")
 
-	if err := runInstaller(ctx, javaPath, dir, jar.Filename, "--installServer"); err != nil {
+	if err := installForge(ctx, javaPath, dir, jar.Filename, "Forge"); err != nil {
 		return installerError("Forge", err)
 	}
 
