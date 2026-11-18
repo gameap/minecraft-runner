@@ -33,11 +33,19 @@ func NewDownloader(registry *providers.Registry) *Downloader {
 	}
 }
 
-// Download resolves and downloads a server JAR
+// Download resolves and downloads a server JAR. A server without a file of its
+// own to download, such as Quilt, is installed instead.
 func (d *Downloader) Download(ctx context.Context, opts DownloadOptions) (*providers.ServerJar, error) {
 	jar, err := d.Resolve(ctx, opts)
 	if err != nil {
 		return nil, err
+	}
+
+	if jar.URL == "" {
+		if err := d.install(ctx, opts, jar); err != nil {
+			return nil, err
+		}
+		return jar, nil
 	}
 
 	if err := d.Fetch(ctx, opts.Directory, jar, opts.Force); err != nil {
@@ -45,6 +53,36 @@ func (d *Downloader) Download(ctx context.Context, opts DownloadOptions) (*provi
 	}
 
 	return jar, nil
+}
+
+// install has the provider build a server that has no file of its own to
+// download, unless that version is installed already. Such providers install
+// without Java.
+func (d *Downloader) install(ctx context.Context, opts DownloadOptions, jar *providers.ServerJar) error {
+	provider, err := d.registry.Get(opts.Mod)
+	if err != nil {
+		return fmt.Errorf("unknown server type '%s': %w", opts.Mod, err)
+	}
+
+	key := installKey(provider.Name(), jar.Version, jar.ModVersion)
+	if resolver, ok := provider.(providers.LaunchResolver); ok && !opts.Force && !installUnfinished(opts.Directory, key) {
+		if target := resolver.ResolveLaunch(opts.Directory, jar); target != nil {
+			fmt.Printf("Server already installed: %s\n", target.Jar)
+			return nil
+		}
+	}
+
+	if err := os.MkdirAll(opts.Directory, 0755); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
+	if err := startInstall(opts.Directory, key); err != nil {
+		return err
+	}
+	if err := provider.PostDownload(ctx, opts.Directory, jar, ""); err != nil {
+		return fmt.Errorf("failed to install: %w", err)
+	}
+
+	return finishInstall(opts.Directory, key)
 }
 
 // Resolve asks the provider which file serves the requested version. It is the
@@ -73,8 +111,13 @@ func (d *Downloader) Resolve(ctx context.Context, opts DownloadOptions) (*provid
 	return jar, nil
 }
 
-// Fetch downloads a resolved JAR into the directory unless a verified copy is already there
+// Fetch downloads a resolved JAR into the directory unless a verified copy is
+// already there. A server without a URL is installed by its provider alone.
 func (d *Downloader) Fetch(ctx context.Context, directory string, jar *providers.ServerJar, force bool) error {
+	if jar.URL == "" {
+		return nil
+	}
+
 	targetPath := filepath.Join(directory, jar.Filename)
 
 	if !force && d.IsDownloaded(directory, jar) {

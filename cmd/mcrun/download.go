@@ -45,9 +45,11 @@ Examples:
 		if jar.ModVersion != "" {
 			fmt.Printf("  Mod Version: %s\n", jar.ModVersion)
 		}
-		fmt.Printf("  File: %s\n", jar.Filename)
+		if jar.Filename != "" {
+			fmt.Printf("  File: %s\n", jar.Filename)
+		}
 
-		if jar.RequiresInstall {
+		if jar.RequiresInstall && jar.URL != "" {
 			fmt.Println("\n[WARNING] This server requires installation.")
 			fmt.Println("  The installer will run automatically when you use 'mcrun run'")
 		}

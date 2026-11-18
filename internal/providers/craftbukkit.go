@@ -60,6 +60,11 @@ func (p *CraftBukkitProvider) PostDownload(_ context.Context, _ string, _ *Serve
 	return nil
 }
 
+// Prepare prepares the Paper server served instead
+func (p *CraftBukkitProvider) Prepare(ctx context.Context, dir string, jar *ServerJar) error {
+	return p.paper.Prepare(ctx, dir, jar)
+}
+
 // GetRecommendedJavaVersion returns the recommended Java version
 func (p *CraftBukkitProvider) GetRecommendedJavaVersion(ctx context.Context, mcVersion string) int {
 	return GetRecommendedJavaVersion(ctx, mcVersion)

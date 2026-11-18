@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/hex"
 	"fmt"
 	"hash"
@@ -30,6 +31,11 @@ func VerifySHA1(filePath string, expectedHash string) error {
 // CalculateSHA1 calculates the SHA1 hash of a file
 func CalculateSHA1(filePath string) (string, error) {
 	return calculateHash(sha1.New(), filePath)
+}
+
+// VerifySHA512 verifies that a file matches the expected SHA512 hash
+func VerifySHA512(filePath string, expectedHash string) error {
+	return verifyHash("SHA512", sha512.New(), filePath, expectedHash)
 }
 
 // VerifyMD5 verifies that a file matches the expected MD5 hash

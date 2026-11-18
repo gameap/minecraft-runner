@@ -66,6 +66,7 @@ Supported server types:
 	SilenceErrors: true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		utils.SetVersion(Version)
+		utils.ConfigureMirrors(os.LookupEnv("MCRUN_MIRRORS"))
 
 		var err error
 		cfg, err = config.Load(cfgFile, serverDir)

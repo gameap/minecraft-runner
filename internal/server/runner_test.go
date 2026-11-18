@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 
 	"github.com/gameap/minecraft-runner/internal/config"
@@ -21,6 +22,7 @@ type fakeProvider struct {
 	resolveErr error
 	launch     *providers.LaunchTarget
 	installs   []string
+	installErr error
 
 	installCalls int
 }
@@ -61,7 +63,7 @@ func (p *fakeProvider) PostDownload(_ context.Context, dir string, _ *providers.
 			return err
 		}
 	}
-	return nil
+	return p.installErr
 }
 
 func (p *fakeProvider) GetRecommendedJavaVersion(context.Context, string) int { return 21 }
@@ -287,6 +289,78 @@ func TestInstall(t *testing.T) {
 		}
 	})
 
+	t.Run("a failed installer run is repeated", func(t *testing.T) {
+		dir := t.TempDir()
+		argFile := "libraries/net/minecraftforge/forge/1.20.1-47.4.10/unix_args.txt"
+		writeFile(t, dir, "forge-installer.jar")
+
+		provider := &fakeInstallerProvider{fakeProvider{
+			name: "forge",
+			jar: &providers.ServerJar{
+				Version: "1.20.1", ModVersion: "47.4.10", Filename: "forge-installer.jar", RequiresInstall: true,
+			},
+			launch:     &providers.LaunchTarget{ArgFiles: []string{argFile}},
+			installs:   []string{argFile},
+			installErr: errors.New("processor failed"),
+		}}
+		runner := newTestRunner(provider)
+
+		if _, err := runner.install(context.Background(), provider, provider.jar, "java", dir); err == nil {
+			t.Fatal("expected the installer error")
+		}
+
+		provider.installErr = nil
+		if _, err := runner.install(context.Background(), provider, provider.jar, "java", dir); err != nil {
+			t.Fatalf("second install: %v", err)
+		}
+		if provider.installCalls != 2 {
+			t.Errorf("installer ran %d times, want 2", provider.installCalls)
+		}
+		if installUnfinished(dir, installKey("forge", "1.20.1", "47.4.10")) {
+			t.Error("a finished install is still marked unfinished")
+		}
+		if _, err := os.Stat(filepath.Join(dir, installMarkerName)); !os.IsNotExist(err) {
+			t.Error("the install marker must be gone once nothing is unfinished")
+		}
+	})
+
+	t.Run("another install does not clear the mark of an unfinished one", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, dir, "forge-installer.jar")
+
+		forge := func(modVersion string, installErr error) *fakeInstallerProvider {
+			argFile := "libraries/net/minecraftforge/forge/1.20.1-" + modVersion + "/unix_args.txt"
+			return &fakeInstallerProvider{fakeProvider{
+				name: "forge",
+				jar: &providers.ServerJar{
+					Version: "1.20.1", ModVersion: modVersion, Filename: "forge-installer.jar", RequiresInstall: true,
+				},
+				launch:     &providers.LaunchTarget{ArgFiles: []string{argFile}},
+				installs:   []string{argFile},
+				installErr: installErr,
+			}}
+		}
+		interrupted := forge("47.4.10", errors.New("processor failed"))
+		other := forge("47.4.0", nil)
+		runner := newTestRunner(interrupted)
+
+		if _, err := runner.install(context.Background(), interrupted, interrupted.jar, "java", dir); err == nil {
+			t.Fatal("expected the installer error")
+		}
+		if _, err := runner.install(context.Background(), other, other.jar, "java", dir); err != nil {
+			t.Fatalf("install of another version: %v", err)
+		}
+
+		interrupted.installErr = nil
+		if _, err := runner.install(context.Background(), interrupted, interrupted.jar, "java", dir); err != nil {
+			t.Fatalf("second install: %v", err)
+		}
+		if interrupted.installCalls != 2 {
+			t.Errorf("the interrupted install ran %d times, want 2: its leftovers were taken for an installation",
+				interrupted.installCalls)
+		}
+	})
+
 	t.Run("an installer that leaves nothing to launch is an error", func(t *testing.T) {
 		dir := t.TempDir()
 		writeFile(t, dir, "forge-installer.jar")
@@ -331,7 +405,7 @@ func TestInstalledFallback(t *testing.T) {
 			{Mod: "paper", Version: "1.21.8", Directory: dir},
 			{Mod: "paper", Version: "1.21.8", ModVersion: "60", Directory: dir},
 		} {
-			inst, err := runner.installedFallback(opts, cause)
+			inst, err := runner.installedFallback("paper", opts, cause)
 			if err != nil {
 				t.Fatalf("installedFallback(%+v): %v", opts, err)
 			}
@@ -349,7 +423,7 @@ func TestInstalledFallback(t *testing.T) {
 			{Mod: "paper", Version: "1.21.10", Directory: dir},
 			{Mod: "paper", Version: "1.21.8", ModVersion: "61", Directory: dir},
 		} {
-			if _, err := runner.installedFallback(opts, cause); !errors.Is(err, cause) {
+			if _, err := runner.installedFallback("paper", opts, cause); !errors.Is(err, cause) {
 				t.Errorf("installedFallback(%+v) err = %v, want the resolve error", opts, err)
 			}
 		}
@@ -359,15 +433,37 @@ func TestInstalledFallback(t *testing.T) {
 		dir, runner := setup(t)
 		os.Remove(filepath.Join(dir, "paper-1.21.8-60.jar"))
 
-		if _, err := runner.installedFallback(RunOptions{Mod: "paper", Directory: dir}, cause); !errors.Is(err, cause) {
+		if _, err := runner.installedFallback("paper", RunOptions{Mod: "paper", Directory: dir}, cause); !errors.Is(err, cause) {
 			t.Errorf("err = %v, want the resolve error", err)
+		}
+	})
+
+	t.Run("an install that did not finish is not started", func(t *testing.T) {
+		dir, runner := setup(t)
+		if err := startInstall(dir, installKey("paper", "1.21.8", "60")); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := runner.installedFallback("paper", RunOptions{Mod: "paper", Directory: dir}, cause); !errors.Is(err, cause) {
+			t.Errorf("err = %v, want the resolve error", err)
+		}
+	})
+
+	t.Run("an unfinished install of another version does not matter", func(t *testing.T) {
+		dir, runner := setup(t)
+		if err := startInstall(dir, installKey("paper", "1.21.10", "")); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := runner.installedFallback("paper", RunOptions{Mod: "paper", Directory: dir}, cause); err != nil {
+			t.Errorf("installedFallback: %v", err)
 		}
 	})
 
 	t.Run("no state at all", func(t *testing.T) {
 		runner := newTestRunner(&fakeProvider{name: "paper", resolveErr: cause})
 
-		if _, err := runner.installedFallback(RunOptions{Mod: "paper", Directory: t.TempDir()}, cause); !errors.Is(err, cause) {
+		if _, err := runner.installedFallback("paper", RunOptions{Mod: "paper", Directory: t.TempDir()}, cause); !errors.Is(err, cause) {
 			t.Errorf("err = %v, want the resolve error", err)
 		}
 	})
@@ -460,5 +556,109 @@ func TestLoadStateMissing(t *testing.T) {
 	state, err := LoadState(t.TempDir())
 	if state != nil || err != nil {
 		t.Errorf("LoadState() = %v, %v; want nil, nil", state, err)
+	}
+}
+
+func TestFailedMarkerRewriteKeepsTheUnfinishedInstalls(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs a directory the test cannot write to")
+	}
+
+	dir := t.TempDir()
+	first, second := installKey("forge", "1.20.1", "47.4.0"), installKey("forge", "1.21.1", "52.1.0")
+	for _, key := range []string{first, second} {
+		if err := startInstall(dir, key); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+
+	if err := startInstall(dir, installKey("neoforge", "1.21.1", "21.1.251")); err == nil {
+		t.Error("startInstall() succeeded in a read-only directory")
+	}
+	if err := finishInstall(dir, first); err == nil {
+		t.Error("finishInstall() succeeded in a read-only directory")
+	}
+
+	if got, err := unfinishedInstalls(dir); err != nil || !reflect.DeepEqual(got, []string{first, second}) {
+		t.Errorf("unfinishedInstalls() = %q, %v; want %q", got, err, []string{first, second})
+	}
+}
+
+func TestUnreadableMarkerIsNotReplaced(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs a file the test cannot read")
+	}
+
+	dir := t.TempDir()
+	first := installKey("forge", "1.20.1", "47.4.0")
+	if err := startInstall(dir, first); err != nil {
+		t.Fatal(err)
+	}
+
+	marker := filepath.Join(dir, installMarkerName)
+	if err := os.Chmod(marker, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := startInstall(dir, installKey("forge", "1.21.1", "52.1.0")); err == nil {
+		t.Error("startInstall() succeeded with an unreadable marker")
+	}
+	if err := finishInstall(dir, first); err == nil {
+		t.Error("finishInstall() succeeded with an unreadable marker")
+	}
+	if !installUnfinished(dir, installKey("forge", "1.21.1", "52.1.0")) {
+		t.Error("an unreadable marker counts as a finished install")
+	}
+
+	if err := os.Chmod(marker, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := unfinishedInstalls(dir); err != nil || !reflect.DeepEqual(got, []string{first}) {
+		t.Errorf("unfinishedInstalls() = %q, %v; want %q", got, err, []string{first})
+	}
+}
+
+func TestDownloadInstallsAServerWithoutAFileOfItsOwn(t *testing.T) {
+	dir := t.TempDir()
+	launcher := "quilt-server-launch-1.21.1-0.29.0.jar"
+	provider := &fakeInstallerProvider{fakeProvider{
+		name: "quilt",
+		jar: &providers.ServerJar{
+			Version: "1.21.1", ModVersion: "0.29.0", Filename: launcher, RequiresInstall: true,
+		},
+		launch:   &providers.LaunchTarget{Jar: launcher},
+		installs: []string{launcher},
+	}}
+	registry := providers.NewRegistry()
+	registry.Register(provider)
+	downloader := NewDownloader(registry)
+	opts := DownloadOptions{Version: "1.21.1", Mod: "quilt", Directory: dir}
+
+	for range 2 {
+		if _, err := downloader.Download(context.Background(), opts); err != nil {
+			t.Fatalf("Download: %v", err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, launcher)); err != nil {
+		t.Errorf("the server was not installed: %v", err)
+	}
+	if provider.installCalls != 1 {
+		t.Errorf("installed %d times, want 1", provider.installCalls)
+	}
+	if installUnfinished(dir, installKey("quilt", "1.21.1", "0.29.0")) {
+		t.Error("a finished install is still marked unfinished")
+	}
+
+	opts.Force = true
+	if _, err := downloader.Download(context.Background(), opts); err != nil {
+		t.Fatalf("forced Download: %v", err)
+	}
+	if provider.installCalls != 2 {
+		t.Errorf("a forced download installed %d times in all, want 2", provider.installCalls)
 	}
 }

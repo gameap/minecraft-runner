@@ -3,7 +3,11 @@ package providers
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
+	"strings"
+
+	"github.com/gameap/minecraft-runner/internal/preseed"
 
 	"github.com/gameap/minecraft-runner/pkg/api/paper"
 )
@@ -170,11 +174,44 @@ func (p *FillProvider) GetServerJar(ctx context.Context, version, modVersion str
 		URL:        download.URL,
 		SHA256:     download.Checksums.SHA256,
 		Filename:   download.Name,
+		Extras:     fillModules(build),
 	}, nil
+}
+
+// fillModules lists the modules Waterfall would download on start
+func fillModules(build *paper.BuildInfo) []preseed.File {
+	var modules []preseed.File
+	for key, download := range build.Downloads {
+		name, ok := strings.CutPrefix(key, "module:")
+		if !ok {
+			continue
+		}
+		modules = append(modules, preseed.File{
+			Path:   "modules/" + name + ".jar",
+			URLs:   []string{download.URL},
+			SHA256: download.Checksums.SHA256,
+		})
+	}
+
+	sort.Slice(modules, func(i, j int) bool { return modules[i].Path < modules[j].Path })
+
+	return modules
 }
 
 // PostDownload handles post-download steps (none for Fill projects)
 func (p *FillProvider) PostDownload(_ context.Context, _ string, _ *ServerJar, _ string) error {
+	return nil
+}
+
+// Prepare puts in place what the server downloads on start: the vanilla
+// server Paper and Folia patch, the modules of Waterfall
+func (p *FillProvider) Prepare(ctx context.Context, dir string, jar *ServerJar) error {
+	switch p.project {
+	case "paper", "folia":
+		return preparePaperclip(ctx, dir, jar)
+	case "waterfall":
+		return prepareModules(ctx, dir, jar)
+	}
 	return nil
 }
 

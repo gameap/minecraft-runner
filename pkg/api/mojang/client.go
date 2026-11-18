@@ -57,20 +57,20 @@ type Version struct {
 	ReleaseTime time.Time `json:"releaseTime"`
 }
 
+// Download is one file of a version
+type Download struct {
+	SHA1 string `json:"sha1"`
+	Size int64  `json:"size"`
+	URL  string `json:"url"`
+}
+
 // VersionDetail contains detailed information about a specific version
 type VersionDetail struct {
 	ID        string `json:"id"`
 	Downloads struct {
-		Server struct {
-			SHA1 string `json:"sha1"`
-			Size int64  `json:"size"`
-			URL  string `json:"url"`
-		} `json:"server"`
-		Client struct {
-			SHA1 string `json:"sha1"`
-			Size int64  `json:"size"`
-			URL  string `json:"url"`
-		} `json:"client"`
+		Server         Download `json:"server"`
+		ServerMappings Download `json:"server_mappings"`
+		Client         Download `json:"client"`
 	} `json:"downloads"`
 	JavaVersion struct {
 		Component    string `json:"component"`
@@ -106,6 +106,21 @@ func (c *Client) GetVersionDetail(ctx context.Context, versionURL string) (*Vers
 	}
 
 	return &detail, nil
+}
+
+// GetVersion fetches the details of the version id
+func (c *Client) GetVersion(ctx context.Context, id string) (*VersionDetail, error) {
+	manifest, err := c.GetVersionManifest(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	version := manifest.FindVersion(id)
+	if version == nil {
+		return nil, fmt.Errorf("minecraft version %s not found", id)
+	}
+
+	return c.GetVersionDetail(ctx, version.URL)
 }
 
 // FindVersion finds a version by ID in the manifest

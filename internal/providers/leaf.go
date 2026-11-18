@@ -159,6 +159,11 @@ func (p *LeafProvider) PostDownload(_ context.Context, _ string, _ *ServerJar, _
 	return nil
 }
 
+// Prepare puts the vanilla server the launcher patches in place
+func (p *LeafProvider) Prepare(ctx context.Context, dir string, jar *ServerJar) error {
+	return preparePaperclip(ctx, dir, jar)
+}
+
 // GetRecommendedJavaVersion returns the recommended Java version
 func (p *LeafProvider) GetRecommendedJavaVersion(ctx context.Context, mcVersion string) int {
 	return GetRecommendedJavaVersion(ctx, mcVersion)

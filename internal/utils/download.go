@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -23,6 +24,10 @@ const (
 
 	// stallTimeout aborts a download that stopped delivering data
 	stallTimeout = 60 * time.Second
+
+	// dialTimeout bounds connecting, so an unreachable host is left for a
+	// mirror quickly
+	dialTimeout = 10 * time.Second
 )
 
 // userAgent identifies mcrun to the download APIs. PaperMC asks for a
@@ -50,6 +55,7 @@ type HTTPClient struct {
 func NewHTTPClient(showProgress bool) *HTTPClient {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.ResponseHeaderTimeout = headerTimeout
+	transport.DialContext = (&net.Dialer{Timeout: dialTimeout, KeepAlive: 30 * time.Second}).DialContext
 
 	return &HTTPClient{
 		client:       &http.Client{Transport: transport},
@@ -71,10 +77,13 @@ func (e *StatusError) Error() string {
 }
 
 // doWithRetry performs a GET request, retrying network errors, 5xx and 429
-func (c *HTTPClient) doWithRetry(ctx context.Context, url string) (*http.Response, error) {
+// up to retries times. With fastFail a host that cannot be reached at all is
+// not retried and a broken exchange is retried once, because a mirror is
+// waiting to take over.
+func (c *HTTPClient) doWithRetry(ctx context.Context, url string, retries int, fastFail bool) (*http.Response, error) {
 	var lastErr error
 
-	for attempt := 0; attempt <= c.retryMax; attempt++ {
+	for attempt := 0; attempt <= retries; attempt++ {
 		if attempt > 0 {
 			backoff := c.retryWaitMin * time.Duration(1<<uint(attempt-1))
 			if backoff > c.retryWaitMax {
@@ -100,6 +109,9 @@ func (c *HTTPClient) doWithRetry(ctx context.Context, url string) (*http.Respons
 				return nil, ctx.Err()
 			}
 			lastErr = err
+			if fastFail && (isConnectError(err) || attempt >= 1) {
+				break
+			}
 			continue
 		}
 
@@ -112,36 +124,54 @@ func (c *HTTPClient) doWithRetry(ctx context.Context, url string) (*http.Respons
 		return resp, nil
 	}
 
-	return nil, fmt.Errorf("request failed after %d retries: %w", c.retryMax, lastErr)
+	return nil, fmt.Errorf("request failed: %w", lastErr)
 }
 
-// Get performs a GET request and returns the response body
+// Get performs a GET request and returns the response body. The upstream and
+// each mirror get requestTimeout of their own; an answer that breaks off is
+// asked from the next mirror.
 func (c *HTTPClient) Get(ctx context.Context, url string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
-	defer cancel()
+	from := upstreamSource
+	for {
+		data, source, err := c.get(ctx, url, from)
 
-	resp, err := c.doWithRetry(ctx, url)
+		next, retry := retryAfterBreak(ctx, url, source, err)
+		if !retry {
+			return data, err
+		}
+		from = next
+	}
+}
+
+func (c *HTTPClient) get(ctx context.Context, url string, from int) ([]byte, int, error) {
+	resp, source, err := c.fetch(ctx, url, requestTimeout, from)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, source, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, &StatusError{StatusCode: resp.StatusCode, URL: url}
+		return nil, source, &StatusError{StatusCode: resp.StatusCode, URL: url}
 	}
 
-	return io.ReadAll(resp.Body)
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, source, ctx.Err()
+		}
+		return nil, source, fmt.Errorf("failed to read response: %w: %w", errBrokenBody, err)
+	}
+
+	return data, source, nil
 }
 
-// DownloadFile downloads a file to the specified path with progress bar
+// DownloadFile downloads a file to the specified path with progress bar. A
+// download that breaks off midway is started over through the next mirror.
 func (c *HTTPClient) DownloadFile(ctx context.Context, url string, destPath string) (err error) {
 	dir := filepath.Dir(destPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
-
-	ctx, cancel := context.WithCancelCause(ctx)
-	defer cancel(nil)
 
 	tmpPath := destPath + ".tmp"
 	file, err := os.Create(tmpPath)
@@ -155,14 +185,61 @@ func (c *HTTPClient) DownloadFile(ctx context.Context, url string, destPath stri
 		}
 	}()
 
-	resp, err := c.doWithRetry(ctx, url)
+	from := upstreamSource
+	for {
+		var source int
+		source, err = c.downloadTo(ctx, url, destPath, file, from)
+
+		next, retry := retryAfterBreak(ctx, url, source, err)
+		if !retry {
+			break
+		}
+
+		if _, err = file.Seek(0, io.SeekStart); err != nil {
+			return fmt.Errorf("failed to rewind file: %w", err)
+		}
+		if err = file.Truncate(0); err != nil {
+			return fmt.Errorf("failed to truncate file: %w", err)
+		}
+		from = next
+	}
 	if err != nil {
-		return fmt.Errorf("download failed: %w", err)
+		return err
+	}
+
+	if err = file.Close(); err != nil {
+		return fmt.Errorf("failed to close file: %w", err)
+	}
+
+	if err = os.Rename(tmpPath, destPath); err != nil {
+		return fmt.Errorf("failed to rename file: %w", err)
+	}
+
+	return nil
+}
+
+// errBrokenBody marks a download that failed while the body was arriving
+var errBrokenBody = errors.New("download broke off")
+
+func isBrokenBody(err error) bool {
+	return errors.Is(err, errBrokenBody)
+}
+
+// downloadTo writes one response into file
+func (c *HTTPClient) downloadTo(
+	parent context.Context, url, destPath string, file *os.File, from int,
+) (source int, err error) {
+	ctx, cancel := context.WithCancelCause(parent)
+	defer cancel(nil)
+
+	resp, source, err := c.fetch(ctx, url, 0, from)
+	if err != nil {
+		return source, fmt.Errorf("download failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return &StatusError{StatusCode: resp.StatusCode, URL: url}
+		return source, &StatusError{StatusCode: resp.StatusCode, URL: url}
 	}
 
 	var writer io.Writer = file
@@ -188,27 +265,23 @@ func (c *HTTPClient) DownloadFile(ctx context.Context, url string, destPath stri
 		if cause := context.Cause(ctx); cause != nil && !errors.Is(cause, context.Canceled) {
 			err = cause
 		}
-		return fmt.Errorf("failed to write file: %w", err)
+		if parent.Err() != nil {
+			return source, fmt.Errorf("failed to write file: %w", err)
+		}
+		return source, fmt.Errorf("failed to write file: %w: %w", errBrokenBody, err)
 	}
 
 	// Not every provider publishes a checksum, and a broken mirror may well
 	// answer 200 with an empty or cut-off body
 	if written == 0 {
-		return fmt.Errorf("the server sent an empty file for %s", url)
+		return source, fmt.Errorf("the server sent an empty file for %s", url)
 	}
 	if resp.ContentLength > 0 && written != resp.ContentLength {
-		return fmt.Errorf("incomplete download of %s: got %d of %d bytes", url, written, resp.ContentLength)
+		return source, fmt.Errorf("%w: incomplete download of %s: got %d of %d bytes",
+			errBrokenBody, url, written, resp.ContentLength)
 	}
 
-	if err = file.Close(); err != nil {
-		return fmt.Errorf("failed to close file: %w", err)
-	}
-
-	if err = os.Rename(tmpPath, destPath); err != nil {
-		return fmt.Errorf("failed to rename file: %w", err)
-	}
-
-	return nil
+	return source, nil
 }
 
 // FileExists checks if a file exists at the given path

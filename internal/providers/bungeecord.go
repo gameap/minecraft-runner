@@ -3,7 +3,11 @@ package providers
 import (
 	"context"
 	"fmt"
+	"path"
 	"strconv"
+	"strings"
+
+	"github.com/gameap/minecraft-runner/internal/preseed"
 
 	"github.com/gameap/minecraft-runner/pkg/api/jenkins"
 )
@@ -103,7 +107,44 @@ func (p *BungeecordProvider) GetServerJar(ctx context.Context, _, modVersion str
 		URL:             downloadURL,
 		Filename:        fmt.Sprintf("BungeeCord-%d.jar", build.Number),
 		RequiresInstall: false,
+		Extras:          p.modules(ctx, build),
 	}, nil
+}
+
+// modules lists the modules a build published separately. Builds up to #2107
+// download them on start from Jenkins; later builds bundle them.
+func (p *BungeecordProvider) modules(ctx context.Context, build *jenkins.BuildInfo) []preseed.File {
+	var modules []preseed.File
+	for _, artifact := range build.Artifacts {
+		if !strings.HasPrefix(artifact.RelativePath, "module/") || !strings.HasSuffix(artifact.RelativePath, ".jar") {
+			continue
+		}
+		modules = append(modules, preseed.File{
+			Path: "modules/" + path.Base(artifact.RelativePath),
+			URLs: []string{p.client.GetArtifactURL(build.Number, artifact.RelativePath)},
+		})
+	}
+
+	if len(modules) == 0 {
+		return nil
+	}
+
+	// Without checksums a module from an older build would pass for current
+	fingerprints, err := p.client.GetFingerprints(ctx, build.Number)
+	if err != nil {
+		fmt.Printf("[WARNING] Could not get the checksums of the BungeeCord modules: %v\n", err)
+		return modules
+	}
+	for i := range modules {
+		modules[i].MD5 = fingerprints["net.md-5:"+path.Base(modules[i].Path)]
+	}
+
+	return modules
+}
+
+// Prepare puts in place the modules the proxy would download on start
+func (p *BungeecordProvider) Prepare(ctx context.Context, dir string, jar *ServerJar) error {
+	return prepareModules(ctx, dir, jar)
 }
 
 // PostDownload handles post-download steps (none for Bungeecord)
