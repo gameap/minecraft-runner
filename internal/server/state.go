@@ -61,23 +61,29 @@ func (s *State) Save(directory string) error {
 		return fmt.Errorf("failed to encode %s: %w", stateFileName, err)
 	}
 
-	tmp, err := os.CreateTemp(directory, stateFileName+".*.tmp")
+	return replaceFile(directory, stateFileName, append(data, '\n'))
+}
+
+// replaceFile writes name in directory through a temporary file: a write that
+// fails or is interrupted leaves the previous content in place
+func replaceFile(directory, name string, data []byte) error {
+	tmp, err := os.CreateTemp(directory, name+".*.tmp")
 	if err != nil {
-		return fmt.Errorf("failed to create temporary state file: %w", err)
+		return fmt.Errorf("failed to create temporary file for %s: %w", name, err)
 	}
 	tmpName := tmp.Name()
 	defer os.Remove(tmpName)
 
-	if _, err := tmp.Write(append(data, '\n')); err != nil {
+	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
-		return fmt.Errorf("failed to write %s: %w", stateFileName, err)
+		return fmt.Errorf("failed to write %s: %w", name, err)
 	}
 	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("failed to close %s: %w", stateFileName, err)
+		return fmt.Errorf("failed to close %s: %w", name, err)
 	}
 
-	if err := os.Rename(tmpName, filepath.Join(directory, stateFileName)); err != nil {
-		return fmt.Errorf("failed to move %s into place: %w", stateFileName, err)
+	if err := os.Rename(tmpName, filepath.Join(directory, name)); err != nil {
+		return fmt.Errorf("failed to move %s into place: %w", name, err)
 	}
 
 	return nil
@@ -154,11 +160,7 @@ func startInstall(directory, key string) error {
 		return nil
 	}
 
-	data := strings.Join(append(keys, key), "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(directory, installMarkerName), []byte(data), 0644); err != nil {
-		return fmt.Errorf("failed to write %s: %w", installMarkerName, err)
-	}
-	return nil
+	return replaceFile(directory, installMarkerName, []byte(strings.Join(append(keys, key), "\n")+"\n"))
 }
 
 // finishInstall clears the mark of the installer run for key. The marks of
@@ -179,8 +181,5 @@ func finishInstall(directory, key string) error {
 		return nil
 	}
 
-	if err := os.WriteFile(path, []byte(strings.Join(rest, "\n")+"\n"), 0644); err != nil {
-		return fmt.Errorf("failed to write %s: %w", installMarkerName, err)
-	}
-	return nil
+	return replaceFile(directory, installMarkerName, []byte(strings.Join(rest, "\n")+"\n"))
 }

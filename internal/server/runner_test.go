@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 
 	"github.com/gameap/minecraft-runner/internal/config"
@@ -555,6 +556,36 @@ func TestLoadStateMissing(t *testing.T) {
 	state, err := LoadState(t.TempDir())
 	if state != nil || err != nil {
 		t.Errorf("LoadState() = %v, %v; want nil, nil", state, err)
+	}
+}
+
+func TestFailedMarkerRewriteKeepsTheUnfinishedInstalls(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs a directory the test cannot write to")
+	}
+
+	dir := t.TempDir()
+	first, second := installKey("forge", "1.20.1", "47.4.0"), installKey("forge", "1.21.1", "52.1.0")
+	for _, key := range []string{first, second} {
+		if err := startInstall(dir, key); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+
+	if err := startInstall(dir, installKey("neoforge", "1.21.1", "21.1.251")); err == nil {
+		t.Error("startInstall() succeeded in a read-only directory")
+	}
+	if err := finishInstall(dir, first); err == nil {
+		t.Error("finishInstall() succeeded in a read-only directory")
+	}
+
+	if got, want := unfinishedInstalls(dir), []string{first, second}; !reflect.DeepEqual(got, want) {
+		t.Errorf("unfinishedInstalls() = %q, want %q", got, want)
 	}
 }
 
