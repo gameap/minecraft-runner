@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/gameap/minecraft-runner/internal/providers"
@@ -117,24 +119,68 @@ func launchFilesExist(directory string, target providers.LaunchTarget) bool {
 	return true
 }
 
-// installUnfinished tells whether an installer run in directory did not finish
-func installUnfinished(directory string) bool {
-	_, err := os.Stat(filepath.Join(directory, installMarkerName))
-	return err == nil
+// installKey names one installation in the install marker, which holds a line
+// for every installer run in the directory that did not finish
+func installKey(provider, version, modVersion string) string {
+	return strings.TrimSpace(provider + " " + version + " " + modVersion)
 }
 
-// startInstall marks an installer run that has not finished yet
-func startInstall(directory string) error {
-	if err := os.WriteFile(filepath.Join(directory, installMarkerName), nil, 0644); err != nil {
+func unfinishedInstalls(directory string) []string {
+	data, err := os.ReadFile(filepath.Join(directory, installMarkerName))
+	if err != nil {
+		return nil
+	}
+
+	var keys []string
+	for _, line := range strings.Split(string(data), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			keys = append(keys, line)
+		}
+	}
+
+	return keys
+}
+
+// installUnfinished tells whether the installer run for key in directory did
+// not finish
+func installUnfinished(directory, key string) bool {
+	return slices.Contains(unfinishedInstalls(directory), key)
+}
+
+// startInstall marks the installer run for key as not finished yet
+func startInstall(directory, key string) error {
+	keys := unfinishedInstalls(directory)
+	if slices.Contains(keys, key) {
+		return nil
+	}
+
+	data := strings.Join(append(keys, key), "\n") + "\n"
+	if err := os.WriteFile(filepath.Join(directory, installMarkerName), []byte(data), 0644); err != nil {
 		return fmt.Errorf("failed to write %s: %w", installMarkerName, err)
 	}
 	return nil
 }
 
-// finishInstall clears the mark of an unfinished installer run
-func finishInstall(directory string) error {
-	if err := os.Remove(filepath.Join(directory, installMarkerName)); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("failed to remove %s: %w", installMarkerName, err)
+// finishInstall clears the mark of the installer run for key. The marks of
+// other installs that did not finish stay, so their leftovers are not taken
+// for an installation.
+func finishInstall(directory, key string) error {
+	keys := unfinishedInstalls(directory)
+	if !slices.Contains(keys, key) {
+		return nil
+	}
+
+	path := filepath.Join(directory, installMarkerName)
+	rest := slices.DeleteFunc(keys, func(k string) bool { return k == key })
+	if len(rest) == 0 {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("failed to remove %s: %w", installMarkerName, err)
+		}
+		return nil
+	}
+
+	if err := os.WriteFile(path, []byte(strings.Join(rest, "\n")+"\n"), 0644); err != nil {
+		return fmt.Errorf("failed to write %s: %w", installMarkerName, err)
 	}
 	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -222,6 +223,21 @@ func TestEnsure(t *testing.T) {
 	}
 }
 
+func TestEnsureReportsCancellation(t *testing.T) {
+	r := newRepo(t, map[string]string{"/x.jar": "x"})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	files := make([]File, 0, 20)
+	for i := range 20 {
+		files = append(files, File{Path: fmt.Sprintf("libs/%d.jar", i), URLs: []string{r.URL + "/x.jar"}, SHA1: sha1Hex("x")})
+	}
+
+	if err := Ensure(ctx, client(), t.TempDir(), "test", files); !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want the cancellation", err)
+	}
+}
+
 func TestEnsureFailsOnMismatch(t *testing.T) {
 	r := newRepo(t, map[string]string{"/x.jar": "tampered"})
 	dir := t.TempDir()
@@ -304,6 +320,49 @@ func TestPaperclip3(t *testing.T) {
 		}
 		if r.requests() != before {
 			t.Error("a prepared server must cost no requests")
+		}
+	})
+
+	t.Run("QuantumLeaper with its own Maven Central mirror", func(t *testing.T) {
+		dir := t.TempDir()
+		r.mu.Lock()
+		r.files["/custom/org/x/needed/1.0/needed-1.0.jar"] = "needed"
+		builtIn := r.hits["/maven2/org/x/needed/1.0/needed-1.0.jar"]
+		r.mu.Unlock()
+		config := "maven-central-mirrors:\n- " + r.URL + "/custom\n- " + quantumLeaperDefaultMirror + "\ndownload-retries: 2\n"
+		if err := writeIfMissing(filepath.Join(dir, "config", "leaf-loader.yml"), config); err != nil {
+			t.Fatal(err)
+		}
+		jarPath := filepath.Join(dir, "leaf-26.3-22.jar")
+		writeJar(t, jarPath, map[string]string{
+			"META-INF/download-context":                            downloadContext,
+			"META-INF/leaper.properties":                           "update-api-type=BIBLIOTHEK\n",
+			"META-INF/libraries.list":                              libraries,
+			"META-INF/libraries/org/x/bundled/1.0/bundled-1.0.jar": "bundled",
+			"META-INF/patches.list":                                "libraries\ta\tb\tc\torg/x/patched/1.0/patched-1.0.jar\torg/x/patched/2.0/patched-1.0.jar.patch\torg/x/patched/2.0/patched-2.0.jar",
+		})
+
+		if err := Paperclip(context.Background(), client(), dir, jarPath); err != nil {
+			t.Fatalf("Paperclip: %v", err)
+		}
+
+		if got := readFile(t, filepath.Join(dir, "libraries", "org", "x", "needed", "1.0", "needed-1.0.jar")); got != "needed" {
+			t.Errorf("needed-1.0.jar = %q", got)
+		}
+		if r.hits["/custom/org/x/needed/1.0/needed-1.0.jar"] != 1 || r.hits["/maven2/org/x/needed/1.0/needed-1.0.jar"] != builtIn {
+			t.Error("the configured mirror must be asked before the built-in repositories")
+		}
+		if got := readFile(t, filepath.Join(dir, "libraries", "org", "x", "needed2", "1.0", "needed2-1.0.jar")); got != "needed2" {
+			t.Errorf("needed2-1.0.jar = %q, the built-in repositories must stay the fallback", got)
+		}
+
+		repositories, err := quantumLeaperMirrors(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := append([]string{r.URL + "/custom/"}, quantumLeaperRepositories...)
+		if !reflect.DeepEqual(repositories, want) {
+			t.Errorf("repositories = %v, want %v", repositories, want)
 		}
 	})
 

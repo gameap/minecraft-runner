@@ -148,6 +148,10 @@ func Ensure(ctx context.Context, client *utils.HTTPClient, dir, what string, fil
 	if len(errs) > 0 {
 		return fmt.Errorf("failed to prepare %s: %w", what, errors.Join(errs...))
 	}
+	// Cancelled before the workers got every file
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("failed to prepare %s: %w", what, err)
+	}
 
 	return nil
 }

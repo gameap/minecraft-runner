@@ -352,6 +352,60 @@ func TestDownloadFileRestartsABrokenDownloadThroughTheMirror(t *testing.T) {
 	}
 }
 
+func TestGetMovesOnFromAMirrorThatBreaksOff(t *testing.T) {
+	broken := newCounted(t, breaksOff(`{"versions":[]}`))
+	mirror := mirrorOf(t, `{"versions":[]}`)
+	useMirrors(t, broken.URL, mirror.URL)
+
+	data, err := newFastClient().Get(context.Background(), closedPortURL(t)+"/versions")
+	if err != nil || string(data) != `{"versions":[]}` {
+		t.Fatalf("Get = %q, %v", data, err)
+	}
+	if broken.calls.Load() != 1 || mirror.calls.Load() != 1 {
+		t.Errorf("mirrors got %d and %d requests, want 1 and 1", broken.calls.Load(), mirror.calls.Load())
+	}
+}
+
+func TestDownloadFileMovesOnFromAMirrorThatBreaksOff(t *testing.T) {
+	upstream := newCounted(t, breaksOff("0123456789"))
+	broken := newCounted(t, breaksOff("0123456789"))
+	mirror := mirrorOf(t, "0123456789")
+	useMirrors(t, broken.URL, mirror.URL)
+
+	dest := filepath.Join(t.TempDir(), "server.jar")
+	if err := newFastClient().DownloadFile(context.Background(), upstream.URL+"/server.jar", dest); err != nil {
+		t.Fatalf("DownloadFile: %v", err)
+	}
+
+	if data, _ := os.ReadFile(dest); string(data) != "0123456789" {
+		t.Errorf("file = %q", data)
+	}
+	calls := []int32{upstream.calls.Load(), broken.calls.Load(), mirror.calls.Load()}
+	if calls[0] != 1 || calls[1] != 1 || calls[2] != 1 {
+		t.Errorf("upstream and mirrors got %v requests, want one each", calls)
+	}
+}
+
+func TestDownloadFileGivesUpWhenEveryMirrorBreaksOff(t *testing.T) {
+	upstream := newCounted(t, breaksOff("0123456789"))
+	first := newCounted(t, breaksOff("0123456789"))
+	second := newCounted(t, breaksOff("0123456789"))
+	useMirrors(t, first.URL, second.URL)
+
+	dest := filepath.Join(t.TempDir(), "server.jar")
+	if err := newFastClient().DownloadFile(context.Background(), upstream.URL+"/server.jar", dest); err == nil {
+		t.Fatal("expected an error")
+	}
+
+	calls := []int32{upstream.calls.Load(), first.calls.Load(), second.calls.Load()}
+	if calls[0] != 1 || calls[1] != 1 || calls[2] != 1 {
+		t.Errorf("upstream and mirrors got %v requests, want one each", calls)
+	}
+	if _, err := os.Stat(dest + ".tmp"); !os.IsNotExist(err) {
+		t.Error("the temporary file must be gone")
+	}
+}
+
 func TestDownloadFileFallsBackWhenUpstreamIsUnreachable(t *testing.T) {
 	mirror := mirrorOf(t, "jar-content")
 	useMirrors(t, mirror.URL)

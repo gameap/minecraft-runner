@@ -65,7 +65,7 @@ func Sponge(ctx context.Context, client *utils.HTTPClient, versions Versions, di
 		mappings = "libraries/net/minecraft/mappings/" + game + "/server.txt"
 	}
 
-	vanilla, err := spongeVanillaFiles(ctx, versions, dir, game, server, mappings)
+	vanilla, err := spongeVanillaFiles(ctx, versions, dir, game, server, mappings, bundled)
 	if err != nil {
 		return err
 	}
@@ -150,18 +150,24 @@ func spongeMinecraftVersion(jar *Jar) (string, error) {
 
 // spongeVanillaFiles describes the vanilla server and the mappings that are
 // not in place yet. What is in place the installer checks itself, so Mojang
-// is not asked on every start.
-func spongeVanillaFiles(ctx context.Context, versions Versions, dir, game, server, mappings string) ([]File, error) {
+// is not asked on every start. A bundle, which is extracted next, also has to
+// open: one that was cut short is fetched again.
+func spongeVanillaFiles(
+	ctx context.Context, versions Versions, dir, game, server, mappings string, bundled bool,
+) ([]File, error) {
 	var missing []string
 	for _, rel := range []string{server, mappings} {
 		if rel == "" {
 			continue
 		}
-		exists, err := pathExists(dir, rel)
+		ready, err := pathExists(dir, rel)
 		if err != nil {
 			return nil, err
 		}
-		if !exists {
+		if ready && bundled && rel == server {
+			ready = opensAsJar(dir, rel)
+		}
+		if !ready {
 			missing = append(missing, rel)
 		}
 	}
@@ -188,6 +194,20 @@ func spongeVanillaFiles(ctx context.Context, versions Versions, dir, game, serve
 	}
 
 	return files, nil
+}
+
+func opensAsJar(dir, rel string) bool {
+	path, err := Resolve(dir, rel)
+	if err != nil {
+		return false
+	}
+
+	jar, err := OpenJar(path)
+	if err != nil {
+		return false
+	}
+
+	return jar.Close() == nil
 }
 
 // extractBundledServer extracts the server from Mojang's bundle the way the

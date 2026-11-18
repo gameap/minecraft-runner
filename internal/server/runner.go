@@ -144,7 +144,7 @@ func (r *Runner) prepare(
 			return nil, nil, ctx.Err()
 		}
 
-		inst, err := r.installedFallback(opts, resolveErr)
+		inst, err := r.installedFallback(provider.Name(), opts, resolveErr)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -197,7 +197,8 @@ func (r *Runner) prepare(
 func (r *Runner) install(
 	ctx context.Context, provider providers.Provider, jar *providers.ServerJar, javaPath, directory string,
 ) (*providers.LaunchTarget, error) {
-	if !installUnfinished(directory) {
+	key := installKey(provider.Name(), jar.Version, jar.ModVersion)
+	if !installUnfinished(directory, key) {
 		if target := r.resolveLaunch(provider, directory, jar); target != nil {
 			return target, nil
 		}
@@ -208,14 +209,14 @@ func (r *Runner) install(
 	}
 
 	if jar.RequiresInstall {
-		if err := startInstall(directory); err != nil {
+		if err := startInstall(directory, key); err != nil {
 			return nil, err
 		}
 		if err := provider.PostDownload(ctx, directory, jar, javaPath); err != nil {
 			return nil, fmt.Errorf("post-download failed: %w", err)
 		}
 	}
-	if err := finishInstall(directory); err != nil {
+	if err := finishInstall(directory, key); err != nil {
 		return nil, err
 	}
 
@@ -258,10 +259,11 @@ func (r *Runner) resolveLaunch(
 	return &providers.LaunchTarget{Jar: jar.Filename}
 }
 
-// installedFallback starts the server a previous run installed when the
-// provider's API cannot tell which file serves the request. Servers that are
-// already on disk must not go down together with a download API.
-func (r *Runner) installedFallback(opts RunOptions, cause error) (*installation, error) {
+// installedFallback starts the server a previous run installed with the
+// provider named provider when its API cannot tell which file serves the
+// request. Servers that are already on disk must not go down together with a
+// download API.
+func (r *Runner) installedFallback(provider string, opts RunOptions, cause error) (*installation, error) {
 	failure := fmt.Errorf("failed to resolve server: %w", cause)
 
 	state, err := LoadState(opts.Directory)
@@ -272,7 +274,7 @@ func (r *Runner) installedFallback(opts RunOptions, cause error) (*installation,
 	if !state.Matches(opts.Mod, opts.Version, opts.ModVersion) || !launchFilesExist(opts.Directory, state.Launch) {
 		return nil, failure
 	}
-	if installUnfinished(opts.Directory) {
+	if installUnfinished(opts.Directory, installKey(provider, state.Version, state.ModVersion)) {
 		return nil, fmt.Errorf("%w; the last install did not finish", failure)
 	}
 

@@ -128,43 +128,45 @@ func (c *HTTPClient) doWithRetry(ctx context.Context, url string, retries int, f
 }
 
 // Get performs a GET request and returns the response body. The upstream and
-// each mirror get requestTimeout of their own; an answer from the upstream
-// that breaks off is asked from a mirror.
+// each mirror get requestTimeout of their own; an answer that breaks off is
+// asked from the next mirror.
 func (c *HTTPClient) Get(ctx context.Context, url string) ([]byte, error) {
-	data, viaMirror, err := c.get(ctx, url, false)
-	if err != nil && !viaMirror && ctx.Err() == nil && isBrokenBody(err) && canMirror(url) {
-		brokeOff(url, err)
-		data, _, err = c.get(ctx, url, true)
-	}
+	from := upstreamSource
+	for {
+		data, source, err := c.get(ctx, url, from)
 
-	return data, err
+		next, retry := retryAfterBreak(ctx, url, source, err)
+		if !retry {
+			return data, err
+		}
+		from = next
+	}
 }
 
-func (c *HTTPClient) get(ctx context.Context, url string, mirrorOnly bool) ([]byte, bool, error) {
-	resp, viaMirror, err := c.fetch(ctx, url, requestTimeout, mirrorOnly)
+func (c *HTTPClient) get(ctx context.Context, url string, from int) ([]byte, int, error) {
+	resp, source, err := c.fetch(ctx, url, requestTimeout, from)
 	if err != nil {
-		return nil, viaMirror, fmt.Errorf("request failed: %w", err)
+		return nil, source, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, viaMirror, &StatusError{StatusCode: resp.StatusCode, URL: url}
+		return nil, source, &StatusError{StatusCode: resp.StatusCode, URL: url}
 	}
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		if ctx.Err() != nil {
-			return nil, viaMirror, ctx.Err()
+			return nil, source, ctx.Err()
 		}
-		return nil, viaMirror, fmt.Errorf("failed to read response: %w: %w", errBrokenBody, err)
+		return nil, source, fmt.Errorf("failed to read response: %w: %w", errBrokenBody, err)
 	}
 
-	return data, viaMirror, nil
+	return data, source, nil
 }
 
 // DownloadFile downloads a file to the specified path with progress bar. A
-// download from the upstream that breaks off midway is started over through a
-// mirror.
+// download that breaks off midway is started over through the next mirror.
 func (c *HTTPClient) DownloadFile(ctx context.Context, url string, destPath string) (err error) {
 	dir := filepath.Dir(destPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -183,18 +185,23 @@ func (c *HTTPClient) DownloadFile(ctx context.Context, url string, destPath stri
 		}
 	}()
 
-	viaMirror, err := c.downloadTo(ctx, url, destPath, file, false)
-	if err != nil && !viaMirror && ctx.Err() == nil && isBrokenBody(err) && canMirror(url) {
-		brokeOff(url, err)
+	from := upstreamSource
+	for {
+		var source int
+		source, err = c.downloadTo(ctx, url, destPath, file, from)
 
-		if _, seekErr := file.Seek(0, io.SeekStart); seekErr != nil {
-			return fmt.Errorf("failed to rewind file: %w", seekErr)
-		}
-		if truncErr := file.Truncate(0); truncErr != nil {
-			return fmt.Errorf("failed to truncate file: %w", truncErr)
+		next, retry := retryAfterBreak(ctx, url, source, err)
+		if !retry {
+			break
 		}
 
-		_, err = c.downloadTo(ctx, url, destPath, file, true)
+		if _, err = file.Seek(0, io.SeekStart); err != nil {
+			return fmt.Errorf("failed to rewind file: %w", err)
+		}
+		if err = file.Truncate(0); err != nil {
+			return fmt.Errorf("failed to truncate file: %w", err)
+		}
+		from = next
 	}
 	if err != nil {
 		return err
@@ -220,19 +227,19 @@ func isBrokenBody(err error) bool {
 
 // downloadTo writes one response into file
 func (c *HTTPClient) downloadTo(
-	parent context.Context, url, destPath string, file *os.File, mirrorOnly bool,
-) (viaMirror bool, err error) {
+	parent context.Context, url, destPath string, file *os.File, from int,
+) (source int, err error) {
 	ctx, cancel := context.WithCancelCause(parent)
 	defer cancel(nil)
 
-	resp, viaMirror, err := c.fetch(ctx, url, 0, mirrorOnly)
+	resp, source, err := c.fetch(ctx, url, 0, from)
 	if err != nil {
-		return viaMirror, fmt.Errorf("download failed: %w", err)
+		return source, fmt.Errorf("download failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return viaMirror, &StatusError{StatusCode: resp.StatusCode, URL: url}
+		return source, &StatusError{StatusCode: resp.StatusCode, URL: url}
 	}
 
 	var writer io.Writer = file
@@ -259,22 +266,22 @@ func (c *HTTPClient) downloadTo(
 			err = cause
 		}
 		if parent.Err() != nil {
-			return viaMirror, fmt.Errorf("failed to write file: %w", err)
+			return source, fmt.Errorf("failed to write file: %w", err)
 		}
-		return viaMirror, fmt.Errorf("failed to write file: %w: %w", errBrokenBody, err)
+		return source, fmt.Errorf("failed to write file: %w: %w", errBrokenBody, err)
 	}
 
 	// Not every provider publishes a checksum, and a broken mirror may well
 	// answer 200 with an empty or cut-off body
 	if written == 0 {
-		return viaMirror, fmt.Errorf("the server sent an empty file for %s", url)
+		return source, fmt.Errorf("the server sent an empty file for %s", url)
 	}
 	if resp.ContentLength > 0 && written != resp.ContentLength {
-		return viaMirror, fmt.Errorf("%w: incomplete download of %s: got %d of %d bytes",
+		return source, fmt.Errorf("%w: incomplete download of %s: got %d of %d bytes",
 			errBrokenBody, url, written, resp.ContentLength)
 	}
 
-	return viaMirror, nil
+	return source, nil
 }
 
 // FileExists checks if a file exists at the given path

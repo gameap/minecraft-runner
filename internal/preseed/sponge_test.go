@@ -106,6 +106,36 @@ func TestSpongeWithoutMappings(t *testing.T) {
 	}
 }
 
+func TestSpongeRepairsATruncatedBundle(t *testing.T) {
+	bundle := jarBytes(t, map[string]string{
+		"META-INF/versions.list":                     sha256Hex("server") + "\t26.1.2\t26.1.2/server-26.1.2.jar\n",
+		"META-INF/versions/26.1.2/server-26.1.2.jar": "server",
+	})
+	r := newRepo(t, map[string]string{"/mojang/bundle.jar": bundle})
+
+	dir := t.TempDir()
+	jarPath := spongeJar(t, dir, "26.1.2-19.0.0-RC2789", "sponge-libraries.json", `{"dependencies": {}}`)
+	versions := &fakeVersions{url: r.URL + "/mojang/bundle.jar", sha1: sha1Hex(bundle)}
+	if err := Sponge(context.Background(), client(), versions, dir, jarPath); err != nil {
+		t.Fatalf("Sponge: %v", err)
+	}
+
+	bundlePath := filepath.Join(dir, "libraries", "net", "minecraft", "26.1.2", "minecraft_server-bundle.jar")
+	if err := os.WriteFile(bundlePath, []byte(bundle[:len(bundle)/2]), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Sponge(context.Background(), client(), versions, dir, jarPath); err != nil {
+		t.Fatalf("Sponge with a truncated bundle: %v", err)
+	}
+	if readFile(t, bundlePath) != bundle {
+		t.Error("the truncated bundle was not fetched again")
+	}
+	if versions.calls != 2 {
+		t.Errorf("%d lookups, want 2", versions.calls)
+	}
+}
+
 func TestSpongeUnbundledWithMD5(t *testing.T) {
 	r := newRepo(t, map[string]string{
 		"/mojang/server.jar":   "vanilla",

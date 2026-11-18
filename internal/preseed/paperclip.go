@@ -3,11 +3,15 @@ package preseed
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+
+	"github.com/goccy/go-yaml"
 
 	"github.com/gameap/minecraft-runner/internal/utils"
 )
@@ -21,10 +25,14 @@ var quantumLeaperRepositories = []string{
 	"https://maven.leafmc.one/snapshots/",
 }
 
+// quantumLeaperDefaultMirror is the Maven Central mirror QuantumLeaper uses
+// unless config/leaf-loader.yml names others
+const quantumLeaperDefaultMirror = "https://maven-central.storage-download.googleapis.com/maven2/"
+
 // quantumLeaperConfig is QuantumLeaper's config/leaf-loader.yml with its
 // defaults. Without the file the first start writes it and exits.
 const quantumLeaperConfig = `maven-central-mirrors:
-- https://maven-central.storage-download.googleapis.com/maven2/
+- ` + quantumLeaperDefaultMirror + `
 download-retries: 2
 auto-update:
   enabled: false
@@ -85,14 +93,18 @@ func paperclip3(ctx context.Context, client *utils.HTTPClient, dir string, jar *
 		return err
 	}
 
+	repositories := quantumLeaperRepositories
 	quantumLeaper := jar.Has("META-INF/leaper.properties")
 	if quantumLeaper {
 		if err := writeIfMissing(filepath.Join(dir, "config", "leaf-loader.yml"), quantumLeaperConfig); err != nil {
 			return err
 		}
+		if repositories, err = quantumLeaperMirrors(dir); err != nil {
+			return err
+		}
 	}
 
-	libraries, err := downloadedLibraries(jar, filepath.Join(dir, filepath.FromSlash(vanilla.Path)))
+	libraries, err := downloadedLibraries(jar, filepath.Join(dir, filepath.FromSlash(vanilla.Path)), repositories)
 	if err != nil {
 		return err
 	}
@@ -107,9 +119,42 @@ func paperclip3(ctx context.Context, client *utils.HTTPClient, dir string, jar *
 	return Ensure(ctx, client, dir, "libraries", libraries)
 }
 
+// quantumLeaperMirrors puts the Maven Central mirrors of
+// config/leaf-loader.yml before the built-in repositories. The default mirror
+// is left out: Maven Central serves the same files, and GameAP's mirror stands
+// in for it.
+func quantumLeaperMirrors(dir string) ([]string, error) {
+	data, err := os.ReadFile(filepath.Join(dir, "config", "leaf-loader.yml"))
+	if errors.Is(err, os.ErrNotExist) {
+		return quantumLeaperRepositories, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config/leaf-loader.yml: %w", err)
+	}
+
+	var config struct {
+		Mirrors []string `yaml:"maven-central-mirrors"`
+	}
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse config/leaf-loader.yml: %w", err)
+	}
+
+	repositories := make([]string, 0, len(config.Mirrors)+len(quantumLeaperRepositories))
+	for _, mirror := range config.Mirrors {
+		mirror = strings.TrimRight(strings.TrimSpace(mirror), "/") + "/"
+		if mirror == "/" || mirror == quantumLeaperDefaultMirror || slices.Contains(repositories, mirror) {
+			continue
+		}
+		repositories = append(repositories, mirror)
+	}
+
+	return append(repositories, quantumLeaperRepositories...), nil
+}
+
 // downloadedLibraries lists the libraries.list entries that the launcher
-// finds neither in its own jar nor in the vanilla jar and does not patch
-func downloadedLibraries(jar *Jar, vanillaPath string) ([]File, error) {
+// finds neither in its own jar nor in the vanilla jar and does not patch, with
+// their URLs in repositories
+func downloadedLibraries(jar *Jar, vanillaPath string, repositories []string) ([]File, error) {
 	data, ok, err := jar.Read("META-INF/libraries.list")
 	if err != nil || !ok {
 		return nil, err
@@ -145,9 +190,9 @@ func downloadedLibraries(jar *Jar, vanillaPath string) ([]File, error) {
 			continue
 		}
 
-		urls := repositoryURLs(quantumLeaperRepositories, path)
+		urls := repositoryURLs(repositories, path)
 		if snapshot := snapshotPath(path); snapshot != "" {
-			urls = append(urls, repositoryURLs(quantumLeaperRepositories, snapshot)...)
+			urls = append(urls, repositoryURLs(repositories, snapshot)...)
 		}
 
 		files = append(files, File{Path: "libraries/" + path, URLs: urls, SHA256: fields[0]})

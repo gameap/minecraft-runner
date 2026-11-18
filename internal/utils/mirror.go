@@ -24,6 +24,10 @@ const mirrorCacheHeader = "X-Mirror-Cache"
 // mirrorAttempts is how often each mirror is tried
 const mirrorAttempts = 2
 
+// upstreamSource is the source of an answer that came from the upstream
+// itself rather than from a mirror
+const upstreamSource = -1
+
 var (
 	mirrorsMu sync.RWMutex
 	mirrors   = defaultMirrors
@@ -156,12 +160,31 @@ func warnOnce(host, format string, args ...any) {
 	fmt.Printf("[WARNING] "+format+"\n", args...)
 }
 
-// brokeOff sends the rest of this run's requests to url's host through the
-// mirrors after an answer from it broke off midway
-func brokeOff(raw string, err error) {
-	host := hostOf(raw)
-	warnOnce(host, "Download from %s broke off (%v), retrying through a mirror", host, err)
-	markHostDown(raw)
+// retryAfterBreak tells where to ask again after err: an answer that broke off
+// midway is asked from the mirror after the source that sent it, while there
+// is one. An upstream that broke off gets the rest of this run's requests
+// sent to the mirrors.
+func retryAfterBreak(ctx context.Context, raw string, source int, err error) (int, bool) {
+	if err == nil || ctx.Err() != nil || !isBrokenBody(err) || !canMirror(raw) {
+		return 0, false
+	}
+
+	mirrorList := currentMirrors()
+	next := source + 1
+	if next >= len(mirrorList) {
+		return 0, false
+	}
+
+	if source == upstreamSource {
+		host := hostOf(raw)
+		warnOnce(host, "Download from %s broke off (%v), retrying through a mirror", host, err)
+		markHostDown(raw)
+	} else {
+		fmt.Printf("[WARNING] Download of %s through %s broke off (%v), trying the next mirror\n",
+			raw, mirrorList[source], err)
+	}
+
+	return next, true
 }
 
 func warnFallback(raw string, cause error, mirror string) {
@@ -172,25 +195,28 @@ func warnFallback(raw string, cause error, mirror string) {
 // fetch performs a GET: first from the upstream, then, when the upstream
 // cannot be reached, from each mirror. A host already found unreachable in
 // this run goes to the mirrors first and gets its own chance only when they
-// fail. budget bounds each request phase (0: no bound); the response body
-// keeps its phase's deadline until it is closed. viaMirror tells whether a
-// mirror answered.
+// fail. From the index of a mirror on, only that mirror and the ones after it
+// are asked. budget bounds each request phase (0: no bound); the response body
+// keeps its phase's deadline until it is closed. source is upstreamSource or
+// the index of the mirror that answered.
 func (c *HTTPClient) fetch(
-	ctx context.Context, raw string, budget time.Duration, mirrorOnly bool,
-) (resp *http.Response, viaMirror bool, err error) {
+	ctx context.Context, raw string, budget time.Duration, from int,
+) (resp *http.Response, source int, err error) {
+	mirrorOnly := from != upstreamSource
+
 	var mirrorList []string
 	if canMirror(raw) {
 		mirrorList = currentMirrors()
 	}
 
+	if mirrorOnly && from >= len(mirrorList) {
+		return nil, upstreamSource, errors.New("no mirror to retry through")
+	}
 	if len(mirrorList) == 0 {
-		if mirrorOnly {
-			return nil, false, errors.New("no mirror to retry through")
-		}
 		resp, err = c.phase(ctx, budget, func(ctx context.Context) (*http.Response, error) {
 			return c.doWithRetry(ctx, raw, c.retryMax, false)
 		})
-		return resp, false, err
+		return resp, upstreamSource, err
 	}
 
 	skipDirect := mirrorOnly || isHostDown(raw)
@@ -201,26 +227,27 @@ func (c *HTTPClient) fetch(
 	} else {
 		resp, err = c.direct(ctx, raw, budget)
 		if err == nil || ctx.Err() != nil || !shouldFallback(err) {
-			return resp, false, err
+			return resp, upstreamSource, err
 		}
 		markHostDown(raw)
 		directErr = err
 	}
 
-	resp, failures, err := c.viaMirrors(ctx, raw, mirrorList, budget, directErr)
+	first := max(from, 0)
+	resp, answered, failures, err := c.viaMirrors(ctx, raw, mirrorList[first:], budget, directErr)
 	if resp != nil || err != nil {
-		return resp, true, err
+		return resp, first + answered, err
 	}
 	if ctx.Err() != nil {
-		return nil, false, ctx.Err()
+		return nil, upstreamSource, ctx.Err()
 	}
 
 	if skipDirect && !mirrorOnly {
 		resp, err = c.direct(ctx, raw, budget)
-		return resp, false, err
+		return resp, upstreamSource, err
 	}
 
-	return nil, false, fmt.Errorf("%w; mirrors failed too: %s", directErr, strings.Join(failures, "; "))
+	return nil, upstreamSource, fmt.Errorf("%w; mirrors failed too: %s", directErr, strings.Join(failures, "; "))
 }
 
 // direct asks the upstream. A host that cannot be reached at all is not
@@ -253,14 +280,14 @@ func shouldFallback(err error) bool {
 }
 
 // viaMirrors asks each mirror in turn. It returns the first good answer, or
-// a 404 error when a mirror reports that the upstream has no such file, or
-// neither, with what went wrong on each mirror.
+// a 404 error when a mirror reports that the upstream has no such file, with
+// the index of that mirror, or neither, with what went wrong on each mirror.
 func (c *HTTPClient) viaMirrors(
 	ctx context.Context, raw string, mirrorList []string, budget time.Duration, directErr error,
-) (*http.Response, []string, error) {
+) (*http.Response, int, []string, error) {
 	failures := make([]string, 0, len(mirrorList))
 
-	for _, base := range mirrorList {
+	for i, base := range mirrorList {
 		target, _ := mirrorURL(base, raw)
 
 		resp, err := c.phase(ctx, budget, func(ctx context.Context) (*http.Response, error) {
@@ -268,7 +295,7 @@ func (c *HTTPClient) viaMirrors(
 		})
 		if err != nil {
 			if ctx.Err() != nil {
-				return nil, nil, nil
+				return nil, 0, nil, nil
 			}
 			failures = append(failures, fmt.Sprintf("%s: %v", base, err))
 			continue
@@ -277,18 +304,18 @@ func (c *HTTPClient) viaMirrors(
 		switch {
 		case resp.StatusCode == http.StatusOK:
 			warnFallback(raw, directErr, base)
-			return resp, nil, nil
+			return resp, i, nil, nil
 		case resp.StatusCode == http.StatusNotFound && resp.Header.Get(mirrorCacheHeader) != "":
 			resp.Body.Close()
 			warnFallback(raw, directErr, base)
-			return nil, nil, &StatusError{StatusCode: resp.StatusCode, URL: raw}
+			return nil, i, nil, &StatusError{StatusCode: resp.StatusCode, URL: raw}
 		default:
 			resp.Body.Close()
 			failures = append(failures, fmt.Sprintf("%s: status %d", base, resp.StatusCode))
 		}
 	}
 
-	return nil, failures, nil
+	return nil, 0, failures, nil
 }
 
 // phase runs one request phase under its own deadline. The deadline stays

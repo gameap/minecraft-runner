@@ -106,8 +106,8 @@ that exact version is not in the server directory yet, and starts it:
 
 Every download goes to its source first. When the source cannot be reached (name
 resolution, connection, TLS, timeouts), keeps answering with 5xx or 429, or refuses the
-client with 403 or 451, the same request is made through the GameAP mirror:
-`https://mirror.gameap.com`, then `https://mirror.gameap.ru`. A 404 is final. A host that
+client with 403 or 451, the same request is made through the GameAP mirror,
+`https://mirror.gameap.ru`. A 404 is final. A host that
 could not be reached is not tried again during the run, and a warning names it once.
 The mirror serves only what mcrun needs and the files are checked against the same
 checksums as direct downloads.
