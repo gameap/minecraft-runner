@@ -584,8 +584,42 @@ func TestFailedMarkerRewriteKeepsTheUnfinishedInstalls(t *testing.T) {
 		t.Error("finishInstall() succeeded in a read-only directory")
 	}
 
-	if got, want := unfinishedInstalls(dir), []string{first, second}; !reflect.DeepEqual(got, want) {
-		t.Errorf("unfinishedInstalls() = %q, want %q", got, want)
+	if got, err := unfinishedInstalls(dir); err != nil || !reflect.DeepEqual(got, []string{first, second}) {
+		t.Errorf("unfinishedInstalls() = %q, %v; want %q", got, err, []string{first, second})
+	}
+}
+
+func TestUnreadableMarkerIsNotReplaced(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs a file the test cannot read")
+	}
+
+	dir := t.TempDir()
+	first := installKey("forge", "1.20.1", "47.4.0")
+	if err := startInstall(dir, first); err != nil {
+		t.Fatal(err)
+	}
+
+	marker := filepath.Join(dir, installMarkerName)
+	if err := os.Chmod(marker, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := startInstall(dir, installKey("forge", "1.21.1", "52.1.0")); err == nil {
+		t.Error("startInstall() succeeded with an unreadable marker")
+	}
+	if err := finishInstall(dir, first); err == nil {
+		t.Error("finishInstall() succeeded with an unreadable marker")
+	}
+	if !installUnfinished(dir, installKey("forge", "1.21.1", "52.1.0")) {
+		t.Error("an unreadable marker counts as a finished install")
+	}
+
+	if err := os.Chmod(marker, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := unfinishedInstalls(dir); err != nil || !reflect.DeepEqual(got, []string{first}) {
+		t.Errorf("unfinishedInstalls() = %q, %v; want %q", got, err, []string{first})
 	}
 }
 

@@ -131,10 +131,13 @@ func installKey(provider, version, modVersion string) string {
 	return strings.TrimSpace(provider + " " + version + " " + modVersion)
 }
 
-func unfinishedInstalls(directory string) []string {
+func unfinishedInstalls(directory string) ([]string, error) {
 	data, err := os.ReadFile(filepath.Join(directory, installMarkerName))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("failed to read %s: %w", installMarkerName, err)
 	}
 
 	var keys []string
@@ -144,18 +147,23 @@ func unfinishedInstalls(directory string) []string {
 		}
 	}
 
-	return keys
+	return keys, nil
 }
 
 // installUnfinished tells whether the installer run for key in directory did
-// not finish
+// not finish. A marker that cannot be read may hold key, so it counts as
+// unfinished; recording the install then fails with the read error.
 func installUnfinished(directory, key string) bool {
-	return slices.Contains(unfinishedInstalls(directory), key)
+	keys, err := unfinishedInstalls(directory)
+	return err != nil || slices.Contains(keys, key)
 }
 
 // startInstall marks the installer run for key as not finished yet
 func startInstall(directory, key string) error {
-	keys := unfinishedInstalls(directory)
+	keys, err := unfinishedInstalls(directory)
+	if err != nil {
+		return err
+	}
 	if slices.Contains(keys, key) {
 		return nil
 	}
@@ -167,7 +175,10 @@ func startInstall(directory, key string) error {
 // other installs that did not finish stay, so their leftovers are not taken
 // for an installation.
 func finishInstall(directory, key string) error {
-	keys := unfinishedInstalls(directory)
+	keys, err := unfinishedInstalls(directory)
+	if err != nil {
+		return err
+	}
 	if !slices.Contains(keys, key) {
 		return nil
 	}
